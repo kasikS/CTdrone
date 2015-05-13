@@ -1,0 +1,14 @@
+*~
+*.swp
+*.bak
+*.hex
+*.bin
+*.elf
+*.o
+tags
+.project
+.cproject
+
+.metadata/
+.settings/
+build/
