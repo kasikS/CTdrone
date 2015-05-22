@@ -38,6 +38,8 @@ const int MAX_SPEED = 100;
 // One millisecond [counter units]
 #define MILLISECOND ((uint32_t)(MAX_DUTY / (PERIOD * 1000)))
 
+#define LED_TEST
+
 xQueueHandle motors_queue;
 static void motors_task(void *parameters);
 static int motor_speed[MOTOR_NUMBER] = { 0, };
@@ -120,7 +122,11 @@ void motor_set_speed(int m, int speed)
     // tHI + tLOW = 20 ms (
     // min speed for tHI = 1 ms
     // max speed for tHI = 2 ms
+#ifdef LED_TEST
+    int val = speed * 20 * MILLISECOND / MAX_SPEED;
+#else
     int val = speed * MILLISECOND / MAX_SPEED + MILLISECOND;
+#endif
 
     switch(m)
     {
