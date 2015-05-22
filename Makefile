@@ -14,11 +14,11 @@ SRCS += serial.c
 SRCS += nrf24l.c
 SRCS += motor.c
 SRCS += ../utils/quadcontrol/link_common.c
-#SRCS += i2c.c
-#SRCS += drv_mpu6050.c
-#SRCS += drv_hmc5883l.c
-#SRCS += PID.c
-#SRCS += FlightControl.c
+SRCS += i2c.c
+SRCS += drv_mpu6050.c
+SRCS += drv_hmc5883l.c
+SRCS += PID.c
+SRCS += FlightControl.c
 
 SRCS += Device/startup_stm32f401xe.s
 
@@ -36,6 +36,7 @@ SRCS += Drivers/FreeRTOS/Source/portable/MemMang/heap_1.c
 
 EXT_SRCS = stm32f4xx_gpio.c
 EXT_SRCS += stm32f4xx_exti.c
+EXT_SRCS += stm32f4xx_i2c.c
 EXT_SRCS += stm32f4xx_rcc.c
 EXT_SRCS += stm32f4xx_syscfg.c
 EXT_SRCS += stm32f4xx_spi.c

@@ -525,7 +525,7 @@ static void nrf24l_transmitter_task(void *parameter)
 {
     (void) parameter;   // suppress warning
     uint8_t data = 0;
-    uint8_t tx_buf[PACKET_TOTAL_SIZE + 1] = {0,};
+    /*uint8_t tx_buf[PACKET_TOTAL_SIZE + 1] = {0,};*/
 
     while(1) {
         // Wait for some space in the register

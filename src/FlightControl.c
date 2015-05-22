@@ -4,10 +4,11 @@
  *  Created on: Mar 15, 2015
  *      Author: Katarzyna Stachyra <kas.stachyra@gmail.com>
  */
-
+#include "stm32f4xx_gpio.h"
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include <semphr.h>
 #include "FlightControl.h"
 #include "PID.h"
 #include "motor.h"
@@ -57,7 +58,7 @@ int flight_control_init(void){
 
 
 	    portBASE_TYPE ret = xTaskCreate(flight_control_task, NULL,
-	                                    configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+	                                    256, NULL, 2, NULL);
 	    if(ret != pdPASS)
 	        return pdFALSE;
 
@@ -67,17 +68,74 @@ int flight_control_init(void){
 
 void ProcessFlightControl(void){
 
-	static angles CurrentPosition;
+//	static angles CurrentPosition;
 	static angles TargetPosition;
 	angles CorrectPosition;
 	speed MotorsSpeed;
 	char buf[32] = {0,};
+	int int_yaw;
+	int int_pitch;
+	int int_roll;
+	//if(xQueueReceive(imu_queue, &CurrentPosition, 0))
 
-	if(xQueueReceive(imu_queue, &CurrentPosition, IMU_TICKS_WAIT))
+	if(xSemaphoreTake(imu_data_rdy, 0))
     {
-		serial_puts("current");
-		//sprintf(buf, "current %f %f %f\r", CurrentPosition.yaw, CurrentPosition.pitch, CurrentPosition.roll);
-    	//serial_puts(buf);
+		if(xSemaphoreTake(imu_data_update, 0))
+		{
+//			int_yaw=(imu_position.yaw);
+//			int_pitch=(imu_position.pitch);
+//			int_roll=(imu_position.roll);
+//
+//			sprintf(buf, "%d,", int_yaw);
+//			serial_puts(buf);
+//			sprintf(buf, "%d,", int_pitch);
+//			serial_puts(buf);
+//			sprintf(buf, "%d\r\n", int_roll);
+//			serial_puts(buf);
+
+
+//			const float factor = 180000.0 / M_PI;
+//
+//			int_yaw=(int)(imu_position.yaw*1000);
+//			int_pitch=(int)(imu_position.pitch*1000);
+//			int_roll=(int)(imu_position.roll*1000);
+//
+//			xSemaphoreGive(imu_data_update);
+//
+//			sprintf(buf, "%d,", int_yaw);
+//			serial_puts(buf);
+//			sprintf(buf, "%d,", int_pitch);
+//			serial_puts(buf);
+//			sprintf(buf, "%d\r\n", int_roll);
+//			serial_puts(buf);
+
+
+//
+//			sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
+//			serial_puts(buf);
+//			sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
+//			serial_puts(buf);
+//			sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
+//			serial_puts(buf);
+
+
+
+
+
+			int_yaw=(imu_position.yaw*1000*180.0f/M_PI);
+			int_pitch=(imu_position.pitch*1000*180.0f/M_PI);
+			int_roll=(imu_position.roll*1000*180.0f/M_PI);
+
+			xSemaphoreGive(imu_data_update);
+
+			sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
+			serial_puts(buf);
+			sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
+			serial_puts(buf);
+			sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
+			serial_puts(buf);
+
+		}
     }
 
 //	if(xQueueReceive(rf_queue, &TargetPosition, RF_TICKS_WAIT))
@@ -119,6 +177,7 @@ static void flight_control_task(void *parameters)
 {
 	while(1){
 		ProcessFlightControl();
-		vTaskDelay(100);
+		GPIO_ToggleBits(GPIOA, GPIO_Pin_6);
+
 	}
 }

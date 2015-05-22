@@ -6,6 +6,7 @@
  */
  
 #pragma once
+#include <semphr.h>
 #include <stdbool.h>
 
 #define M_PI       3.14159265358979323846f
@@ -45,6 +46,9 @@ typedef struct quaternion{
 	float qy;
 	float qz;
 }quaternion;
+
+extern xSemaphoreHandle imu_data_rdy, imu_data_update;
+extern volatile angles imu_position;
 
 bool sensorsAutodetect(void);
 bool mpu6050Detect();

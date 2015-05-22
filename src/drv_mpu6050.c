@@ -4,17 +4,22 @@
  *  Created on:
  *      Author: Katarzyna Stachyra <kas.stachyra@gmail.com>
  */
-#include "stm32f4xx_hal.h"
+//#include "stm32f4xx_hal.h"
+#include "stm32f4xx.h"
+#include "stm32f4xx_gpio.h"
 
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include <semphr.h>
 
 #include <stdint.h>
 #include <math.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <stdio.h>
 
+#include "serial.h"
 #include "drv_mpu6050.h"
 #include "drv_hmc5883l.h"
 #include "i2c.h"
@@ -171,9 +176,11 @@
 #define MPU_I2C_SLV_LEN_LENGTH 4
 
 ///> Size of imu queue (in bytes)
-#define IMU_QUEUE_SIZE   64
-xQueueHandle imu_queue;
+//#define IMU_QUEUE_SIZE   1024//64
+//xQueueHandle imu_queue;
+xSemaphoreHandle imu_data_rdy, imu_data_update;
 static void imu_task(void *parameters);
+volatile angles imu_position;
 
 uint8_t buffer[14];
 uint16_t dmpPacketSize;
@@ -220,7 +227,7 @@ bool sensorsAutodetect(void)
     	mpu6050GyroInit(MPU6050_SCALE_250DPS);
     	mpu6050AccInit(MPU6050_RANGE_2G);
     	mpu6050_setSleepDisabled();
-    	//serial_puts("init");
+    	serial_puts("init\r\n");
     	return true;
     }
   return false;
@@ -244,9 +251,9 @@ bool mpu6050Detect(void)
     uint8_t sig, rev;
     uint8_t tmp[6];
 
-    delay(35);                  // datasheet page 13 says 30ms. other stuff could have been running meanwhile. but we'll be safe
+ //   delay(3500);                  // datasheet page 13 says 30ms. other stuff could have been running meanwhile. but we'll be safe
 
-//    vTaskDelay(35);
+    vTaskDelay(35);
 
     ack = i2cRead(MPU6050_ADDRESS, MPU_RA_WHO_AM_I, 1, &sig);
     if (!ack)
@@ -853,8 +860,8 @@ const unsigned char mpu6050_dmpUpdates6[MPU6050_DMP_UPDATES_SIZE_6] = {
 uint8_t mpu6050_dmpInitialize(void)
 {
 	mpu6050_reset();
-	delay(30);
-	//vTaskDelay(30);
+	//delay(30);
+	vTaskDelay(30);
     mpu6050_setSleepDisabled();
 
     mpu6050_setMemoryBank(0x10, 1, 1);
@@ -1036,7 +1043,11 @@ uint8_t mpu6050_dmpInitialize(void)
            mpu6050_writeMemoryBlock(dmpUpdate + 3, dmpUpdate[2], dmpUpdate[0], dmpUpdate[1]);
 
             //waiting for FIFO count > =46
-            while ((fifoCount = mpu6050_getFIFOCount()) < 46);///////////////////////
+            while ((fifoCount = mpu6050_getFIFOCount()) < 46)
+            	{
+            	vTaskDelay(10);
+            	fifoCount = 4;///////////////////////
+            	}
 
             //reading FIFO data..."));
             mpu6050_getFIFOBytes(fifoBuffer, fifoCount < 128 ? fifoCount : 128);
@@ -1825,7 +1836,7 @@ long map(long x, long in_min, long in_max, long out_min, long out_max){
 int imu_init(void){
 	uint8_t devStatus;
 	bool detected;
-	//mpu6050_reset();  //
+	mpu6050_reset();  //
 	detected=sensorsAutodetect();
 
 	//devStatus=mpu6050_dmpInitialize();
@@ -1837,18 +1848,26 @@ int imu_init(void){
 
 		if (devStatus == 0)
 		{
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+			 GPIO_SetBits(GPIOA, GPIO_Pin_5);
 			mpu6050_dmpEnable(); //enable in the reading task?
 		}
 
 	}
 
 	  //FreeRTOS
-	  	imu_queue = xQueueCreate(IMU_QUEUE_SIZE, sizeof(angles));
-	    if(imu_queue == 0)
-	        return pdFALSE;
+//	  	imu_queue = xQueueCreate(IMU_QUEUE_SIZE, sizeof(angles));
+//	    if(imu_queue == 0)
+//	        return pdFALSE;
 
-	   portBASE_TYPE ret = xTaskCreate(imu_task, NULL, configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+	 	 imu_data_rdy = xSemaphoreCreateBinary();
+	 	 if(imu_data_rdy == NULL)
+	 		 return pdFALSE;
+
+	 	 imu_data_update = xSemaphoreCreateMutex();
+	 	 if(imu_data_update == NULL)
+	 		 return pdFALSE;
+
+	   portBASE_TYPE ret = xTaskCreate(imu_task, NULL, 256, NULL, 2, NULL);
 	    if(ret != pdPASS)
 	        return pdFALSE;
 
@@ -1860,22 +1879,32 @@ static void imu_task(void *parameters){
 		uint8_t devStatus; // return status after each device operation (0 = success, !0 = error);
 		uint8_t mpuIntStatus; // holds actual interrupt status byte from MPU
 		uint16_t fifoCount;
-		uint8_t fifoBuffer[128]; //64 - 6 dof// FIFO storage buffer
-
+		uint8_t fifoBuffer[48]; //64 - 6 dof// FIFO storage buffer
+		char buf[64] = {0,};
+//		uint8_t buf[64];
 		volatile uint8_t mpuInterrupt = 0;
 
 		quaternion quat;
-		angles CurrentPosition;
 		axis gravity;
 		axis mag;
 
+		int int_yaw;
+		int int_pitch;
+		int int_roll;
+		int cnt=0;
+		angles current_position;
 
 		while(1){
+			GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
 			mpuInterrupt = false;
 			mpuIntStatus =  mpu6050_getIntStatus();
 			// get current FIFO count
 
-			if(!(mpuIntStatus & 0x09)) continue;
+			if(!(mpuIntStatus & 0x09)){
+				//GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+			//	serial_puts("no int\r\n");
+				continue;
+			}
 
 			fifoCount = mpu6050_getFIFOCount();
 			// check for overflow (this should never happen unless our code is too inefficient)
@@ -1887,25 +1916,52 @@ static void imu_task(void *parameters){
 			} else if (mpuIntStatus & 0x03) {
 				// wait for correct available data length, should be a VERY short wait
 				//while (fifoCount < dmpPacketSize) fifoCount = mpu6050_getFIFOCount();
-				if(fifoCount<dmpPacketSize)
+				if(fifoCount<dmpPacketSize){
+					//GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+				//	serial_puts("fifocount < packet\r\n");
 					continue;
+				}
 				// read a packet from FIFO
-				mpu6050_getFIFOBytes(fifoBuffer, dmpPacketSize);
+			 	mpu6050_getFIFOBytes(fifoBuffer, dmpPacketSize);
+				GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
 				// track FIFO count here in case there is > 1 packet available
 				// (this lets us immediately read more without waiting for an interrupt)
 				fifoCount -= dmpPacketSize;
 
+
+//
+//				sprintf(buf, "%d %d %d\r\n", (int16_t)((fifoBuffer[0] << 8) + fifoBuffer[1]),
+//						(int16_t)((fifoBuffer[4] << 8) + fifoBuffer[5]),
+//						(int16_t)((fifoBuffer[8] << 8) + fifoBuffer[9]));
+//				serial_puts(buf);
+#if 1
+				//if(++cnt % 10 == 0)
+				{
 					mpu6050_getQuaternion(fifoBuffer, &quat);
 					mpu6050_getGravity(&gravity, &quat);
-					mpu6050_getYawPitchRoll(&quat, &CurrentPosition, &gravity);
+					if(xSemaphoreTake(imu_data_update, 50 / portTICK_PERIOD_MS))
+					{
+						mpu6050_getYawPitchRoll(&quat, &imu_position, &gravity);
+						xSemaphoreGive(imu_data_update);
+						xSemaphoreGive(imu_data_rdy);
+					}
 
-					xQueueSend( imu_queue, ( void * ) &CurrentPosition, 0); // if full don't wait? or overwrite?
 
+//					int_yaw=(current_position.yaw*1000*180.0f/M_PI);
+//					int_pitch=(current_position.pitch*1000*180.0f/M_PI);
+//					int_roll=(current_position.roll*1000*180.0f/M_PI);
+//
+//
+//					sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
+//					serial_puts(buf);
+//					sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
+//					serial_puts(buf);
+//					sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
+//					serial_puts(buf);
+				}
+					//xQueueSend( imu_queue, ( void * ) &CurrentPosition, 0); // if full don't wait? or overwrite?
 
+#endif
 			}
-
-					vTaskDelay(10); //delete
 		}
-
-
 }
