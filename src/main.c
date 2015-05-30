@@ -62,8 +62,7 @@ int main(void)
 #define NRF24L_RX
 void radio_task(void *parameters) {
     char c;
-    uint8_t tx_buf[] = "nrf24_000";
-    uint8_t rx_buf[PACKET_TOTAL_SIZE];
+    uint8_t buf[] = "nrf24_000";
 
     while(1){
 
@@ -73,12 +72,12 @@ void radio_task(void *parameters) {
 #endif
 
 #ifdef NRF24L_TX
-        nrf24l_tx_direct(tx_buf);
-        if(++tx_buf[8] == ':') {
-            tx_buf[8] = '0';
+        nrf24l_tx_direct(buf);
+        if(++buf[8] == ':') {
+            buf[8] = '0';
 
-            if(++tx_buf[7] == ':') {
-                tx_buf[7] = '0';
+            if(++buf[7] == ':') {
+                buf[7] = '0';
             }
         }
 #endif
