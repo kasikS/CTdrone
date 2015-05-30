@@ -15,6 +15,7 @@
 #include "link.h"
 
 void Task_LED_Blink(void *params);
+void radio_task(void *params);
 
 void delay(uint32_t ms)
 {
@@ -30,7 +31,7 @@ int main(void)
 
     // Turn on clocks for stuff we use
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2 | RCC_APB1Periph_TIM3 | RCC_APB1Periph_TIM4 | RCC_APB1Periph_TIM5 | RCC_APB1Periph_I2C1 |  RCC_APB1Periph_USART2 , ENABLE);
-    RCC_APB2PeriphClockCmd( RCC_APB2Periph_TIM1 | RCC_APB2Periph_TIM8, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1 | RCC_APB2Periph_TIM8, ENABLE);
 
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 
@@ -47,16 +48,45 @@ int main(void)
     serial_init(460800);
     motor_init();
     i2c_init();
-    //nrf24l_init();
+    nrf24l_init();
 
     serial_puts("siema!");
 
-    xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
+    /*xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);*/
+    xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
     vTaskStartScheduler();
 
     while(1);
 }
 
+#define NRF24L_RX
+void radio_task(void *parameters) {
+    char c;
+    uint8_t tx_buf[] = "nrf24_000";
+    uint8_t rx_buf[PACKET_TOTAL_SIZE];
+
+    while(1){
+
+#ifdef NRF24L_RX
+        while(nrf24l_getc(&c))
+            serial_putc(c);
+#endif
+
+#ifdef NRF24L_TX
+        nrf24l_tx_direct(tx_buf);
+        if(++tx_buf[8] == ':') {
+            tx_buf[8] = '0';
+
+            if(++tx_buf[7] == ':') {
+                tx_buf[7] = '0';
+            }
+        }
+#endif
+
+        GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+        vTaskDelay(1000);
+    }
+}
 
 void Task_LED_Blink(void *parameters) {
     vTaskDelay(500);
