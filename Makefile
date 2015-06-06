@@ -59,7 +59,7 @@ INCLUDE = $(addprefix -I,$(INC_DIRS))
 
 DEFS = -DSTM32F401xx -DUSE_STDPERIPH_DRIVER
 
-CFLAGS = -ggdb -O0 -std=c99
+CFLAGS += -ggdb -O0 -std=c99
 CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=softfp -fsingle-precision-constant -mthumb-interwork -Wl,--gc-sections
 
 WFLAGS += -Wall -Wextra -Warray-bounds -Wno-unused-parameter -Wno-unused-function
