@@ -74,7 +74,7 @@ int motor_init(void)
     TIM_TimeBaseStructInit(&timer_conf);
     timer_conf.TIM_Period = MAX_DUTY;
     timer_conf.TIM_Prescaler = (uint16_t) ((SystemCoreClock) / TIMER_CLK) - 1;
-    timer_conf.TIM_ClockDivision = 0;
+    timer_conf.TIM_ClockDivision = TIM_CKD_DIV1;
     timer_conf.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(TIM1, &timer_conf);
 
