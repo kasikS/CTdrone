@@ -9,6 +9,7 @@
 #include "motor.h"
 #include "nrf24l.h"
 #include "i2c.h"
+#include "delay_timer.h"
 #include "drv_mpu6050.h"
 //#include "drv_hmc5883l.h"
 #include "FlightControl.h"
@@ -45,6 +46,7 @@ int main(void)
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
+    delay_init();
     serial_init(460800);
     motor_init();
     i2c_init();

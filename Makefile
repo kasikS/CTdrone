@@ -15,6 +15,7 @@ SRCS += nrf24l.c
 SRCS += motor.c
 SRCS += ../utils/quadcontrol/link_common.c
 SRCS += i2c.c
+SRCS += delay_timer.c
 SRCS += drv_mpu6050.c
 SRCS += drv_hmc5883l.c
 SRCS += PID.c
