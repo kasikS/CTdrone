@@ -27,7 +27,7 @@
 // PB5 MOSI
 // PC10 CS
 // PC12 IRQ
-// PC14 CE (RX/TX)
+// PC9 CE (enable RX/TX)
 #define NRF24L_CS_PORT      GPIOC
 #define NRF24L_CS_PIN       GPIO_Pin_10
 
@@ -35,7 +35,7 @@
 #define NRF24L_IRQ_PIN      GPIO_Pin_12
 
 #define NRF24L_CE_PORT      GPIOC
-#define NRF24L_CE_PIN       GPIO_Pin_14
+#define NRF24L_CE_PIN       GPIO_Pin_9
 
 /**
  * @brief Initialises the NRF24L module. After initialisation, the module
