@@ -20,7 +20,7 @@
 #include "delay_timer.h"
 
 // Multiplier adjusted to reduce rounding error for prescaler
-#define TIMER_FREQ_MPLIER   27
+#define TIMER_FREQ_MPLIER   16
 #define TIMER_FREQ          (1000000 * TIMER_FREQ_MPLIER)
 #define TIMER_USECS_LIMIT   (65535 / TIMER_FREQ_MPLIER - 1)
 
