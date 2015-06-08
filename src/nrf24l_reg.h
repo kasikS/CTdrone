@@ -15,6 +15,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @brief NRF24L register definitions.
+ */
+
+#ifndef NRF24L_REG_H
+#define NRF24L_REG_H
+
+///> Possible operation modes
+enum MODE {UNKNOWN, PWR_DOWN, STANDBY, TX, RX};
+
 // Commands
 // (000A AAAA) Read command and status registers. AAAAA = 5 bit Register Map Address
 #define NRF24L_R_REGISTER           0x00
@@ -125,22 +135,22 @@
 
 // SETUP_RETR (0x04)
 #define NRF24L_SET_RETR_ARD(x)      ((x & 0x0F) << 4)
-#define ARD_250_US                  0x00
-#define ARD_500_US                  0x01
-#define ARD_750_US                  0x02
-#define ARD_1000_US                 0x03
-#define ARD_1250_US                 0x04
-#define ARD_1500_US                 0x05
-#define ARD_1750_US                 0x06
-#define ARD_2000_US                 0x07
-#define ARD_2250_US                 0x08
-#define ARD_2500_US                 0x09
-#define ARD_2750_US                 0x0A
-#define ARD_3000_US                 0x0B
-#define ARD_3250_US                 0x0C
-#define ARD_3500_US                 0x0D
-#define ARD_3750_US                 0x0E
-#define ARD_4000_US                 0x0F
+#define NRF24L_ARD_250_US           0x00
+#define NRF24L_ARD_500_US           0x01
+#define NRF24L_ARD_750_US           0x02
+#define NRF24L_ARD_1000_US          0x03
+#define NRF24L_ARD_1250_US          0x04
+#define NRF24L_ARD_1500_US          0x05
+#define NRF24L_ARD_1750_US          0x06
+#define NRF24L_ARD_2000_US          0x07
+#define NRF24L_ARD_2250_US          0x08
+#define NRF24L_ARD_2500_US          0x09
+#define NRF24L_ARD_2750_US          0x0A
+#define NRF24L_ARD_3000_US          0x0B
+#define NRF24L_ARD_3250_US          0x0C
+#define NRF24L_ARD_3500_US          0x0D
+#define NRF24L_ARD_3750_US          0x0E
+#define NRF24L_ARD_4000_US          0x0F
 #define NRF24L_SET_RETR_ARC(x)      ((x & 0x0F))
 
 // RF_CH (0x05)
@@ -190,6 +200,4 @@
 #define NRF24L_FEAT_EN_ACK_PAY      0x02
 #define NRF24L_FEAT_EN_DYN_ACK      0x01
 
-
-///> Possible operation modes
-enum MODE {PWR_DOWN, STANDBY, TX, RX};
+#endif /* NRF24L_REG_H */

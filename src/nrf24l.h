@@ -39,28 +39,30 @@
 
 /**
  * @brief Initialises the NRF24L module. After initialisation, the module
- * stays in IDLE mode. Use nrf24l_set_mode() to change to either TX or RX mode.
+ * stays in RX mode.
  * @return false in case of error.
  */
 int nrf24l_init(void);
 
 /**
- * @brief Changes the current mode to TX, RX or IDLE.
- * @param mode is the requested mode.
- */
-//void nrf24l_set_mode(enum MODE mode);
-
-/**
- * @brief Sends a byte through the radio link. Requires TX mode.
+ * @brief Sends a byte through the radio link.
  * @param data is the byte to be sent.
  */
-void nrf24l_write(char data);
+int nrf24l_putc(char data);
 
 /**
- * @brief Sends an array of bytes through the radio link. Requires TX mode.
+ * @brief Sends an array of bytes through the radio link.
  * @param buf is the array to be sent.
  */
-void nrf24l_puts(const char *buf);
+int nrf24l_puts(const char *buf);
+
+/**
+ * Sends a specified number of characters through the radio link (non-blocking).
+ * @param string is the data to be sent.
+ * @param len is number of characters to be sent.
+ * @return false in case of error.
+ */
+int nrf24l_write(const char *string, int len);
 
 /**
  * @brief Reads a character from the RX buffer (non-blocking).
@@ -76,7 +78,12 @@ int nrf24l_getc(char *c);
  */
 uint8_t nrf24l_get_status(void);
 
-//void nrf24l_set_freq(void);
+/**
+ * @brief Sets channel (i.e. radio frequency) used for communication.
+ * @param channel is the new channel number. Valid values are in range 0-125.
+ */
+void nrf24l_set_channel(uint8_t channel);
+
 //void nrf24l_set_power(void);
 
 /**

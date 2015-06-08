@@ -26,12 +26,12 @@ void delay(uint32_t ms)
 
 int main(void)
 {
-    GPIO_InitTypeDef  GPIO_InitStructure;
+    GPIO_InitTypeDef GPIO_InitStructure;
 
     SystemCoreClockUpdate();
 
     // Turn on clocks for stuff we use
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2 | RCC_APB1Periph_TIM3 | RCC_APB1Periph_TIM4 | RCC_APB1Periph_TIM5 | RCC_APB1Periph_I2C1 |  RCC_APB1Periph_USART2 , ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2 | RCC_APB1Periph_TIM3 | RCC_APB1Periph_TIM4 | RCC_APB1Periph_TIM5 | RCC_APB1Periph_I2C1 |  RCC_APB1Periph_USART2, ENABLE);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1 | RCC_APB2Periph_TIM8, ENABLE);
 
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
@@ -61,31 +61,61 @@ int main(void)
     while(1);
 }
 
-#define NRF24L_RX
+void nrf24l_tx_direct(uint8_t*);
+
 void radio_task(void *parameters) {
+#ifdef NRF24L_MASTER
+    serial_puts("master\r\n");
+    #define NRF24L_TX
+    #define NRF24L_RX
+    int cnt = 0;
+#else
+    serial_puts("echo\r\n");
+    #define NRF24L_ECHO
+#endif
+
     char c;
     uint8_t buf[] = "nrf24_000";
+    uint8_t buf_count;
 
     while(1){
 
-#ifdef NRF24L_RX
-        while(nrf24l_getc(&c))
-            serial_putc(c);
+#ifdef NRF24L_TX
+        nrf24l_write(buf, PACKET_TOTAL_SIZE);
+        if(++buf[7] == ':') {
+            buf[7] = '0';
+
+            if(++buf[6] == ':')
+                buf[6] = '0';
+        }
 #endif
 
-#ifdef NRF24L_TX
-        nrf24l_tx_direct(buf);
-        if(++buf[8] == ':') {
-            buf[8] = '0';
+#ifdef NRF24L_RX
+        while(nrf24l_getc(&c)) {
+            serial_putc(c);
 
-            if(++buf[7] == ':') {
-                buf[7] = '0';
+            if(++cnt == PACKET_TOTAL_SIZE) {
+                cnt = 0;
+                serial_puts("\r\n");
+            }
+        }
+#endif
+
+#ifdef NRF24L_ECHO
+        while(nrf24l_getc(&c)) {
+            serial_putc(c);
+            buf[buf_count++] = c;
+
+            if(buf_count == PACKET_TOTAL_SIZE) {
+                buf_count = 0;
+                serial_puts("\r\n");
+                nrf24l_write(buf, PACKET_TOTAL_SIZE);
             }
         }
 #endif
 
         GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
-        vTaskDelay(1000);
+        vTaskDelay(200);
     }
 }
 

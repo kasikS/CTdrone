@@ -24,6 +24,7 @@
 #include "nrf24l.h"
 #include "nrf24l_reg.h"
 #include "link.h"
+#include "delay_timer.h"
 
 ///> Size of tx/rx queues (in bytes)
 #define NRF24L_QUEUE_SIZE   64
@@ -49,23 +50,7 @@ static SemaphoreHandle_t nrf24l_irq_sem,      // starts irq handler
                          nrf24l_tx_sem,       // enables transmitter
                          nrf24l_tx_queue_mtx; // prevents mixing multibyte packets
 
-static volatile enum MODE nrf24l_mode = PWR_DOWN;
-
-// Debug info TODO to be removed
-#include "serial.h"
-/*void int16_to_hex(uint16_t, const char*);*/
-int serial_puts(const char*);
-static uint16_t display_stat(void) {
-    char buf[7] = {0x00, 0x00, 0x00, 0x00, '\r', '\n', 0x00};
-    int16_t status;
-
-    status = nrf24l_get_status();
-    /*int16_to_hex(status, buf);*/
-    serial_puts(buf);
-
-    return status;
-}
-// TODO remove finish or move to utils.c?
+static volatile enum MODE nrf24l_mode;
 
 // Raw communication functions
 inline static void spi_tx(uint8_t data)
@@ -144,23 +129,11 @@ static void nrf24l_clear_irq(void)
                                     NRF24L_STATUS_MAX_RT);
 }
 
-// TODO add in the header?
-void nrf24l_set_channel(uint8_t channel)
-{
-    assert_param(channel <= 125);
-
-    // TODO assert, verify the parameter
-    nrf24l_write_reg(NRF24L_RF_CH, channel);
-}
-
 static void nrf24l_set_mode(enum MODE mode)
 {
-    const int default_conf = NRF24L_CONF_EN_CRC | NRF24L_CONF_CRCO;
+    // TODO enable/disable related tasks?
+    const int DEFAULT_CONF = NRF24L_CONF_EN_CRC | NRF24L_CONF_CRCO;
 
-    // TODO power down -> standby 1.5ms (internal osc), 150 us( external clk)
-    // standby->tx/rx (130us) p.22
-
-    // TODO enable/disable related tasks
     if(nrf24l_mode == mode)
         return;
 
@@ -168,34 +141,85 @@ static void nrf24l_set_mode(enum MODE mode)
     {
         case PWR_DOWN:
             nrf24l_ce_disable();
-            nrf24l_write_reg(NRF24L_CONFIG, default_conf);
+            nrf24l_write_reg(NRF24L_CONFIG, DEFAULT_CONF);
             break;
 
         case STANDBY:
             nrf24l_ce_disable();
-            nrf24l_write_reg(NRF24L_CONFIG, default_conf | NRF24L_CONF_PWR_UP);
-            if(nrf24l_mode == PWR_DOWN) {     // TODO compare with tpd2stby (4.5ms in the worst case)
-                for(int i = 0; i < 60000; ++i) __asm("nop");
-            }
+            nrf24l_write_reg(NRF24L_CONFIG, DEFAULT_CONF | NRF24L_CONF_PWR_UP);
+
+            if(nrf24l_mode == PWR_DOWN)
+                delay_us(1500);
             break;
 
         case TX:
+            // should not go directly from PWR_DOWN/RX to TX mode (fig.3/datasheet)
+            if(nrf24l_mode != STANDBY)
+                nrf24l_set_mode(STANDBY);
+
+            nrf24l_flush_tx_fifo();
             nrf24l_clear_irq();
-            nrf24l_write_reg(NRF24L_CONFIG, default_conf | NRF24L_CONF_PWR_UP);
-            /*nrf24l_ce_enable();*/ // TODO?
+            nrf24l_ce_disable();
+            nrf24l_write_reg(NRF24L_CONFIG, DEFAULT_CONF | NRF24L_CONF_PWR_UP);
+            // no nrf24l_ce_enable() - it is done in the transmitter task
+
+            if(nrf24l_mode == STANDBY)
+                delay_us(130);
             break;
 
         case RX:
+            // should not go directly from PWR_DOWN/TX to RX mode (fig.3/datasheet)
+            if(nrf24l_mode != STANDBY)
+                nrf24l_set_mode(STANDBY);
+
             nrf24l_flush_rx_fifo();
             nrf24l_clear_irq();
             nrf24l_ce_disable();
-            nrf24l_write_reg(NRF24L_CONFIG, default_conf | NRF24L_CONF_PWR_UP |
+            nrf24l_write_reg(NRF24L_CONFIG, DEFAULT_CONF | NRF24L_CONF_PWR_UP |
                              NRF24L_CONF_PRIM_RX);
             nrf24l_ce_enable();
+
+            if(nrf24l_mode == STANDBY)
+                delay_us(130);
+            break;
+
+        default:
+            assert_param(0);
             break;
     }
 
+#if 0
+    switch(mode) {
+        case PWR_DOWN:
+            serial_puts("pwrdwn\r\n");
+            break;
+
+        case STANDBY:
+            serial_puts("stdby\r\n");
+            break;
+
+        case RX:
+            serial_puts("rx\r\n");
+            break;
+
+        case TX:
+            serial_puts("tx\r\n");
+            break;
+    }
+#endif
+
     nrf24l_mode = mode;
+}
+
+static void nrf24l_read_fifo(uint8_t *data)
+{
+    const uint8_t cmd[PACKET_TOTAL_SIZE + 1] = { NRF24L_R_RX_PAYLOAD, 0, };
+    nrf24l_raw_multi(cmd, data, PACKET_TOTAL_SIZE + 1);
+}
+
+static uint8_t nrf24l_get_fifo_status(void)
+{
+    return nrf24l_read_reg(NRF24L_FIFO_STATUS);
 }
 
 int nrf24l_init(void)
@@ -244,6 +268,9 @@ int nrf24l_init(void)
     nrf24l_cs_disable();
     nrf24l_ce_disable();
 
+    // Wait for module to initialize after power-on
+    delay_ms(11);
+
     // Configure IRQ pin interrupt
     SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOC, EXTI_PinSource12);
 
@@ -266,8 +293,9 @@ int nrf24l_init(void)
     spi_conf.SPI_CPOL = SPI_CPOL_Low;
     spi_conf.SPI_CPHA = SPI_CPHA_1Edge;
     spi_conf.SPI_NSS = SPI_NSS_Soft;
-    spi_conf.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; // TODO max 8 MHz => prescaler 2
+    spi_conf.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8;
     spi_conf.SPI_FirstBit = SPI_FirstBit_MSB;
+    spi_conf.SPI_CRCPolynomial = 1;
     SPI_Init(SPI1, &spi_conf);
 
     SPI_Cmd(SPI1, ENABLE);
@@ -302,21 +330,10 @@ int nrf24l_init(void)
         return pdFALSE;
 
 
+    // Be sure that we are in the initial mode
+    nrf24l_mode = UNKNOWN;
+    nrf24l_set_mode(PWR_DOWN);
 
-    // TODO temporarily disable autoack
-    /*nrf24l_write_reg(NRF24L_EN_AA, 0);*/
-
-    // Enable dynamic payload length
-    /*nrf24l_write_reg(NRF24L_FEATURE, NRF24L_FEAT_EN_DPL);*/ // TODO
-
-    // Retransmit delay 1500us (permits all ACK payload sizes) // TODO decrease if ACK payload is not used
-    /*nrf24l_write_reg(NRF24L_SETUP_RETR, NRF24L_SET_RETR_ARD(ARD_1500_US));*/
-
-
-
-
-
-    // TODO software reset
     nrf24l_set_channel(10);
 
     // Set pipelines size
@@ -328,48 +345,42 @@ int nrf24l_init(void)
     nrf24l_write_reg(NRF24L_RX_PW_P5, PACKET_TOTAL_SIZE);
 
     // Set data rate and output power // TODO increase power & data rate?
-    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_MIN_6DBM | NRF24L_RF_SET_RF_1MBPS);
+    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_MIN_6DBM |
+                                      NRF24L_RF_SET_RF_1MBPS);
 
+    // Enable CRC, 2-bytes encoding
     nrf24l_write_reg(NRF24L_CONFIG, NRF24L_CONF_EN_CRC | NRF24L_CONF_CRCO);
 
-    /* Enable auto-acknowledgment for all pipes */
-    nrf24l_write_reg(NRF24L_EN_AA, 0x3F);
-    /* Enable RX addresses */
-    nrf24l_write_reg(NRF24L_EN_RXADDR, 0x3F);
-    /* Auto retransmit delay: 1000 (4x250) us and Up to 15 retransmit trials */
-    nrf24l_write_reg(NRF24L_SETUP_RETR, 0x4F);
-    /* Dynamic length configurations: No dynamic length */
-    nrf24l_write_reg(NRF24L_DYNPD, NRF24L_DPL_P0 | NRF24L_DPL_P1 | NRF24L_DPL_P2 | NRF24L_DPL_P3 | NRF24L_DPL_P4 | NRF24L_DPL_P5);
+    // Enable auto-acknowledgment for all pipes
+    nrf24l_write_reg(NRF24L_EN_AA, NRF24L_EN_AA_P5 | NRF24L_EN_AA_P4 |
+                                   NRF24L_EN_AA_P3 | NRF24L_EN_AA_P2 |
+                                   NRF24L_EN_AA_P1 | NRF24L_EN_AA_P0);
+
+    // Enable RX addresses
+    nrf24l_write_reg(NRF24L_EN_RXADDR, NRF24L_RXADDR_P5 | NRF24L_RXADDR_P4 |
+                                       NRF24L_RXADDR_P3 | NRF24L_RXADDR_P2 |
+                                       NRF24L_RXADDR_P1 | NRF24L_RXADDR_P0);
+
+    // Auto retransmit delay: 1000 (4x250) us and up to 15 retransmit trials
+    nrf24l_write_reg(NRF24L_SETUP_RETR, NRF24L_ARD_1000_US |
+                                        NRF24L_SET_RETR_ARC(15));
+
+    // Dynamic length configurations: No dynamic length
+    nrf24l_write_reg(NRF24L_DYNPD, NRF24L_DPL_P0 | NRF24L_DPL_P1 |
+                                   NRF24L_DPL_P2 | NRF24L_DPL_P3 |
+                                   NRF24L_DPL_P4 | NRF24L_DPL_P5);
 
     nrf24l_flush_tx_fifo();
     nrf24l_flush_rx_fifo();
 
     nrf24l_clear_irq();
-
-    /*nrf24l_set_mode(STANDBY);*/   // TODO
-    //set mode rx?
-    nrf24l_set_mode(RX);   // TODO
+    nrf24l_set_mode(STANDBY);
 
     return pdTRUE;
 }
 
-
-
-
-void nrf24l_tx_direct(uint8_t *data) {
-    uint8_t cmd[PACKET_TOTAL_SIZE + 1] = { NRF24L_W_TX_PAYLOAD, 0, };
-    // TODO lame?
-    for(uint8_t i = 0; i < PACKET_TOTAL_SIZE; ++i)
-        cmd[i+1] = data[i];
-
-    nrf24l_ce_disable(); // TODO ??
-    nrf24l_set_mode(TX); // TODO ??
-    nrf24l_flush_tx_fifo();
-    nrf24l_raw_multi(cmd, NULL, PACKET_TOTAL_SIZE + 1);
-    nrf24l_ce_enable();
-}
-
-uint8_t nrf24l_rx_data_ready(void)
+#if 0
+static uint8_t nrf24l_rx_data_ready(void)
 {
     // slightly modified get_status(), so we could get both fifo & general
     // status in the same request
@@ -386,29 +397,38 @@ uint8_t nrf24l_rx_data_ready(void)
 
     return 0;
 }
-
-#if 0
-// TODO remove
-void nrf24l_rx_direct(uint8_t* data)
-{
-    nrf24l_read_fifo(data);
-    // clear RX_DR flag
-    nrf24l_write_reg(NRF24L_STATUS, NRF24L_STATUS_RX_DR);
-}
 #endif
 
-
-
-
-void nrf24l_write(char data)
+int nrf24l_putc(char data)
 {
     // TODO give semaphore?
-    xQueueSend(nrf24l_tx_queue, (void*) &data, NRF24L_TICKS_WAIT);
+    if(xQueueSend(nrf24l_tx_queue, (void*) &data, NRF24L_TICKS_WAIT) != pdTRUE)
+        return pdFALSE;
+
+    return pdTRUE;
 }
 
-void nrf24l_puts(const char *buf)
+int nrf24l_puts(const char *buf)
 {
-    while(*buf) nrf24l_write(*buf++);
+    while(*buf)
+    {
+        if(nrf24l_putc(*buf++) != pdTRUE)
+            return pdFALSE;
+    }
+
+    return pdTRUE;
+}
+
+int nrf24l_write(const char *string, int len)
+{
+    for(int i = 0; i < len; ++i)
+    {
+        if(nrf24l_putc(*string++) != pdTRUE)
+            return pdFALSE;  // Error, stop filling the queue
+    }
+
+    // No errors
+    return pdTRUE;
 }
 
 int nrf24l_getc(char *c)
@@ -417,23 +437,20 @@ int nrf24l_getc(char *c)
     return xQueueReceive(nrf24l_rx_queue, (void*) c, NRF24L_TICKS_WAIT);
 }
 
-static void nrf24l_read_fifo(uint8_t *data)
-{
-    const uint8_t cmd[PACKET_TOTAL_SIZE + 1] = { NRF24L_R_RX_PAYLOAD, 0, };
-    nrf24l_raw_multi(cmd, data, PACKET_TOTAL_SIZE + 1);
-}
-
-static uint8_t nrf24l_get_fifo_status(void)
-{
-    return nrf24l_read_reg(NRF24L_FIFO_STATUS);
-}
-
 uint8_t nrf24l_get_status(void)
 {
     // TODO use NOP - it is only one byte
     return nrf24l_read_reg(NRF24L_STATUS);
 }
 
+void nrf24l_set_channel(uint8_t channel)
+{
+    assert_param(channel <= 125);
+
+    nrf24l_write_reg(NRF24L_RF_CH, channel);
+}
+
+#if 0
 uint8_t nrf24l_get_lost_packets(void)
 {
     return (nrf24l_read_reg(NRF24L_OBSERVE_TX) >> 4);
@@ -449,16 +466,10 @@ uint8_t nrf24l_get_rx_power(void)
     return nrf24l_read_reg(NRF24L_RPD);
 }
 
-// TODO
-/*
 void nrf24l_set_power(void)
 {
 }
-nrf24l_write_ack_payload
-nrf24l_read_ack_payload
-set_rx_addr
-set_tx_addr
-*/
+#endif
 
 int nrf24l_irq(void)
 {
@@ -475,14 +486,13 @@ static void nrf24l_irq_handler_task(void *parameter)
 
     while(1) {
         if(xSemaphoreTake(nrf24l_irq_sem, portMAX_DELAY) == pdTRUE) {
-            GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
             status = nrf24l_get_status();
-            irq_src = status & (NRF24L_STATUS_RX_DR | NRF24L_STATUS_TX_DS | NRF24L_STATUS_MAX_RT);
+            irq_src = status & (NRF24L_STATUS_RX_DR | NRF24L_STATUS_TX_DS |
+                                NRF24L_STATUS_MAX_RT);
 
             if(status & NRF24L_STATUS_RX_DR) {
                 serial_putc('R');
 
-                // TODO should whole fifo be read at once?
                 do {
                     nrf24l_read_fifo(rx_buffer);
 
@@ -497,7 +507,6 @@ static void nrf24l_irq_handler_task(void *parameter)
 
             if(status & NRF24L_STATUS_TX_DS) {
                 serial_putc('T');
-                /*nrf24l_set_mode(RX);*/
 
                 /*if(!(status & NRF24L_STATUS_TX_FULL))*/
                     /*xSemaphoreGive(nrf24l_tx_sem);*/
@@ -507,6 +516,8 @@ static void nrf24l_irq_handler_task(void *parameter)
                     /*nrf24l_set_mode(RX);*/
                 /*else if(status & NRF24L_FIFO_STAT_TX_FULL)*/
                     /*xSemaphoreGive(nrf24l_tx_sem);*/
+
+                nrf24l_set_mode(RX);
             }
 
 #if 0
@@ -524,11 +535,16 @@ static void nrf24l_irq_handler_task(void *parameter)
 static void nrf24l_transmitter_task(void *parameter)
 {
     (void) parameter;   // suppress warning
-    uint8_t data = 0;
+
+    // Full transmit command
+    uint8_t tx_cmd[PACKET_TOTAL_SIZE + 2] = { NRF24L_W_TX_PAYLOAD, 0, };
+    // Point to the data buffer in the command above
+    uint8_t *tx_buf = &tx_cmd[1];
     /*uint8_t tx_buf[PACKET_TOTAL_SIZE + 1] = {0,};*/
+    uint8_t cnt = 0;
 
     while(1) {
-        // Wait for some space in the register
+        // Wait for some space in the FIFO
         /*if(xSemaphoreTake(nrf24l_tx_sem, NRF24L_TICKS_WAIT) == pdTRUE) {*/
 
             // Wait for data to be sent
@@ -538,18 +554,16 @@ static void nrf24l_transmitter_task(void *parameter)
             // TODO check if fifo is not full
             /*nrf24l_get_status();*/
 
-            uint8_t count = 0;
-            while(xQueueReceive(nrf24l_tx_queue, (void*) &data, 0) && count < PACKET_TOTAL_SIZE) {
-                GPIO_ToggleBits(GPIOA, GPIO_Pin_5);      // blink, blink
-                /*nrf24l_write_reg(NRF24L_W_TX_PAYLOAD, data);*/
-                ++count;
-            }
-
-            if(count > 0) {
-                // Transmit packet
-                nrf24l_set_mode(TX);
-                /*serial_puts("cnt");*/     //TODO remove
-                /*serial_putc(count);*/
+            while(xQueueReceive(nrf24l_tx_queue, (void*) &tx_buf[cnt], 0)) {
+                if(++cnt == PACKET_TOTAL_SIZE) {
+                    cnt = 0;
+                    nrf24l_set_mode(TX);
+                    nrf24l_raw_multi(tx_cmd, NULL, PACKET_TOTAL_SIZE + 1);
+                    nrf24l_ce_enable();
+                    // TODO repeat until FIFO is empty
+                    delay_us(11);
+                    nrf24l_ce_disable();
+                }
             }
         /*}*/
     }
