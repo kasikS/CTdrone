@@ -520,11 +520,9 @@ static void nrf24l_irq_handler_task(void *parameter)
                 nrf24l_set_mode(RX);
             }
 
-#if 0
             if(status & NRF24L_STATUS_MAX_RT) {
-                // TODO
+                serial_putc('E');
             }
-#endif
 
             // Clear IRQ
             nrf24l_write_reg(NRF24L_STATUS, irq_src);

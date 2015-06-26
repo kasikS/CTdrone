@@ -75,7 +75,7 @@ void radio_task(void *parameters) {
 #endif
 
     char c;
-    uint8_t buf[] = "nrf24_000";
+    uint8_t buf[] = "nrf24_0000";
     uint8_t buf_count;
 
     while(1){

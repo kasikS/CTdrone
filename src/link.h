@@ -22,8 +22,8 @@
 
 enum PACKET_TYPE { PT_STATUS = 0x00, PT_JOYSTICK = 0x01, PT_BOOTLOADER = 0x11 };
 
-#define PACKET_TOTAL_SIZE   (sizeof(struct packet))
-#define PACKET_DATA_SIZE    (sizeof(((struct packet*)(0))->data)
+#define PACKET_TOTAL_SIZE   ((int)sizeof(struct packet))
+#define PACKET_DATA_SIZE    ((int)sizeof(((struct packet*)(0))->data)
 
 struct packet
 {
@@ -35,9 +35,10 @@ struct packet
             int16_t roll;
             int16_t pitch;
             int16_t yaw;
+            int8_t buttons;
         } joy;
 
-        char text[8];
+        char text[9];
     } data;
 };
 

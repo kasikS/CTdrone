@@ -4,8 +4,8 @@ PROJECT = quadcontrol
 SRCS = main.c
 SRCS += config.c
 SRCS += serial.c
-SRCS += ../../src/link.c
-SRCS += link_common.c
+SRCS += link.c
+SRCS += ../../src/link_common.c
 SRCS += joystick.c
 SRCS += utils.c
 

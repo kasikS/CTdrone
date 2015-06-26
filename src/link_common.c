@@ -19,8 +19,6 @@
 
 crc_t link_crc(const struct packet* pkt)
 {
-    // TODO use zlib's crc32 to calculate checksum
-
     crc_t crc = 0;
     const char* ptr = (const char*)(pkt);
 
