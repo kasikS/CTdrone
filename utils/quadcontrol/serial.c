@@ -27,7 +27,7 @@
 
 static int serial_fd = -1;
 
-void serial_init(const char* path, speed_t baud)
+int serial_init(const char* path, speed_t baud)
 {
     struct termios tio;
 
@@ -41,10 +41,8 @@ void serial_init(const char* path, speed_t baud)
 
     serial_fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
 
-    if(serial_fd < 0) {
-        perror("could not open serial port");
-        exit(1);
-    }
+    if(serial_fd < 0)
+        return 1;
 
     cfsetospeed(&tio, baud);
     cfsetispeed(&tio, baud);
@@ -53,6 +51,8 @@ void serial_init(const char* path, speed_t baud)
     tcsetattr(serial_fd, TCSANOW, &tio);
 
     MSG("Serial port %s opened\n", path);
+
+    return 0;
 }
 
 void serial_close(void)

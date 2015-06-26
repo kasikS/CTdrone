@@ -20,77 +20,86 @@
 #include <string.h>
 #include <signal.h>
 
+#include "config.h"
 #include "serial.h"
 #include "link.h"
 #include "joystick.h"
 #include "debug.h"
 
-static const char *default_joystick = "/dev/input/js0";
-static const char *default_serial = "/dev/ttyACM0";
-
-// Axis mapping
 // http://www.modelflight.com.au/blog/how-to-fly-remote-control-quadcopter/
-// TODO configuration file?
-static const int THROTTLE_AXIS = 1;
-static const int ROLL_AXIS = 3;        // aileron
-static const int PITCH_AXIS = 4;       // elevator
-static const int YAW_AXIS = 0;         // rudder
 
 void sig_handler(int signo);
-static int active = 1;
+static int active = 0;
 
 int main(int argc, char **argv)
 {
-    struct joystick joy;
+    struct config conf;
+    const char*config_filename;
     struct packet pkt = {0,};
     char buf[32] = {0,};
     int16_t crc;
+    int default_cfg = 0;
 
-    if(argc >= 2 && !strcmp("--help", argv[1])) {
-        puts("Usage: quadcontrol [joystick device] [serial device]");
-        puts("e.g. quadcontrol /dev/input/js0 /dev/ttyUSB0");
+    if(argc == 2 && !strcmp("--help", argv[1])) {
+        puts("Usage: quadcontrol [config_file.cfg]");
         exit(1);
     }
+
+   if(argc == 2)
+       config_filename = argv[1];
+   else
+       config_filename = CONFIG_DEFAULT_FILE;
+
+   if(config_load(config_filename, &conf)) {
+        fputs("WARNING: Could not load configuration file. Reverting to defaults.\n", stderr);
+        config_default(&conf);
+        config_save(CONFIG_DEFAULT_FILE, &conf);
+        default_cfg = 1;
+   }
 
    if(signal(SIGINT, sig_handler) == SIG_ERR) {
-        fputs("An error occurred while setting a signal handler.\n", stderr);
+        fputs("ERROR: Could not set a signal handler.\n", stderr);
         exit(1);
     }
 
-    /*joystick_init(&joy, argc >= 2 ? argv[1] : default_joystick);*/
-    /*serial_init(argc >= 3 ? argv[2] : default_serial, B115200);*/
-    joystick_init(&joy, default_joystick);
-    serial_init(default_serial, B115200);
+    if(joystick_init(conf.joystick_device)) {
+        perror("could not open joystick device");
+        exit(1);
+    }
+
+    joystick_set_axis_mapping(conf.joystick_mapping);
+    joystick_set_axis_calibration(conf.joystick_calibration);
+
+    if(default_cfg) {
+        joystick_calibrate(conf.joystick_calibration);
+        config_save(CONFIG_DEFAULT_FILE, &conf);
+    }
+
+    if(serial_init(conf.serial_device, conf.serial_speed)) {
+        perror("could not open serial port");
+        exit(1);
+    }
+
     link_init();
 
+    active = 1;
     while(active) {
-        joystick_update(&joy);
+        joystick_update();
 
-#if 0
-        // Full joystick report
-        if (axes) {
-            printf("Axes: ");
-            for (i = 0; i < axes; i++)
-                printf("%2d:%6d ", i, axis[i]);
-        }
-
-        if (buttons) {
-            printf("Buttons: ");
-            for (i = 0; i < buttons; i++)
-                printf("%2d:%s ", i, button[i] ? "on " : "off");
-        }
-#else
-        printf("\rthrottle: %6d \t yaw:%6d \t pitch:%6d \t roll:%6d",
-                joy.axis[THROTTLE_AXIS], joy.axis[YAW_AXIS], joy.axis[PITCH_AXIS], joy.axis[ROLL_AXIS]);
-
-        // TODO sensitivity parameter
         // Prepare & send a packet
         pkt.type = PT_JOYSTICK;
-        pkt.data.joy.throttle = -joy.axis[THROTTLE_AXIS];
-        pkt.data.joy.yaw      =  joy.axis[YAW_AXIS];
-        pkt.data.joy.pitch    =  joy.axis[PITCH_AXIS];
-        pkt.data.joy.roll     =  joy.axis[ROLL_AXIS];
+        pkt.data.joy.throttle =  joystick_get_control_val(THROTTLE_AXIS);
+        pkt.data.joy.yaw      =  joystick_get_control_val(YAW_AXIS);
+        pkt.data.joy.pitch    =  joystick_get_control_val(PITCH_AXIS);
+        pkt.data.joy.roll     =  joystick_get_control_val(ROLL_AXIS);
+        pkt.data.joy.buttons  =  joystick_get_buttons();
         crc = link_crc(&pkt);
+
+        printf("\rthrottle: %6d\tyaw:%6d\tpitch:%6d\troll:%6d\tbuttons:%6d",
+                pkt.data.joy.throttle, pkt.data.joy.yaw,
+                pkt.data.joy.pitch, pkt.data.joy.roll,
+                pkt.data.joy.buttons);
+
         serial_write((const char*) &pkt, PACKET_TOTAL_SIZE);
         serial_write((const char*) &crc, CRC_SIZE);
 
@@ -99,13 +108,13 @@ int main(int argc, char **argv)
             printf("\treceived: %s", buf);
             memset(buf, 0, sizeof(buf));
         }
-#endif
+
         fflush(stdout);
     }
 
-
     serial_close();
-    joystick_close(&joy);
+    joystick_close();
+    config_save(CONFIG_DEFAULT_FILE, &conf);
 
     return 1;
 }

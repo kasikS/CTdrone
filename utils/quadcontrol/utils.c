@@ -15,15 +15,34 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SERIAL_H
-#define SERIAL_H
+#include <sys/time.h>
+#include <sys/select.h>
+#include <unistd.h>
+#include <stdio.h>
 
-#include <termios.h>
+int key_pressed(int *key)
+{
+    int key_pressed = 0;
+    struct timeval tv;
+    fd_set rdfs;
 
-// TODO docs
-int serial_init(const char* path, speed_t baud);
-void serial_close(void);
-int serial_write(const char* src, int length);
-int serial_read(char* dest, int length);
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000;
 
-#endif /* SERIAL_H */
+    FD_ZERO(&rdfs);
+    FD_SET(STDIN_FILENO, &rdfs);
+
+    select(STDIN_FILENO+1, &rdfs, NULL, NULL, &tv);
+
+    if(FD_ISSET(STDIN_FILENO, &rdfs))
+    {
+        int key_code = getchar();
+
+        if(key != NULL)
+            *key = key_code;
+
+        key_pressed = 1;
+    }
+
+    return key_pressed;
+}

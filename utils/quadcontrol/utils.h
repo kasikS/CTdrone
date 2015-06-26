@@ -15,15 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SERIAL_H
-#define SERIAL_H
+#ifndef UTILS_H
+#define UTILS_H
 
-#include <termios.h>
+// TODO comments
+int key_pressed(int *key);
 
-// TODO docs
-int serial_init(const char* path, speed_t baud);
-void serial_close(void);
-int serial_write(const char* src, int length);
-int serial_read(char* dest, int length);
-
-#endif /* SERIAL_H */
+#endif /* UTILS_H */

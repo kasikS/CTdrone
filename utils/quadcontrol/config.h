@@ -15,15 +15,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SERIAL_H
-#define SERIAL_H
+#ifndef CONFIG_H
+#define CONFIG_H
 
-#include <termios.h>
+#include "joystick.h"
 
-// TODO docs
-int serial_init(const char* path, speed_t baud);
-void serial_close(void);
-int serial_write(const char* src, int length);
-int serial_read(char* dest, int length);
+extern const char*CONFIG_DEFAULT_FILE;
 
-#endif /* SERIAL_H */
+#define DEVICE_NAME_LEN 32
+
+struct config {
+    char serial_device[DEVICE_NAME_LEN];
+    int serial_speed;
+
+    char joystick_device[DEVICE_NAME_LEN];
+    struct axis_calibration joystick_calibration[CONTROLS_NUMBER];
+    int joystick_mapping[CONTROLS_NUMBER];
+};
+
+// TODO
+int config_load(const char* filename, struct config*conf);
+int config_save(const char* filename, struct config*conf);
+int config_default(struct config*conf);
+void config_compute_joy_scales(struct config*conf);
+
+#endif /* CONFIG_H */

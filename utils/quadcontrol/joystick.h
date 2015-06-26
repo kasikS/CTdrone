@@ -20,20 +20,42 @@
 
 #define JOYSTICK_NAME_LEN 128
 
-struct joystick
+enum CONTROL {
+    THROTTLE_AXIS   = 0,
+    YAW_AXIS        = 1,
+    PITCH_AXIS      = 2,
+    ROLL_AXIS       = 3,
+    CONTROLS_NUMBER
+};
+
+struct axis_calibration
 {
-    int fd;
-    unsigned char axes;
-    unsigned char buttons;
-    int version;
-    char name[JOYSTICK_NAME_LEN];
-    int *axis;
-    int *button;
+    // Axis offset
+    int device_offset;
+
+    // Device range
+    int device_max, device_min;
+
+    // Desired range
+    int target_max, target_min;
+
+    // Factors computed basing on the above data
+    float scale_neg, scale_pos;
 };
 
 // TODO desc
-void joystick_init(struct joystick* joy, const char* device);
-void joystick_update(struct joystick* joy);
-void joystick_close(struct joystick* joy);
+int joystick_init(const char* device);
+void joystick_close(void);
+int joystick_update(void);
+
+void joystick_calibrate(struct axis_calibration *calibration);
+void joystick_set_axis_mapping(int *mapping);
+void joystick_set_axis_calibration(struct axis_calibration *calibration);
+
+int joystick_get_buttons(void);
+int joystick_get_control_raw(enum CONTROL control);
+int joystick_get_control_val(enum CONTROL control);
+
+void joystick_print_report(void);
 
 #endif /* JOYSTICK_H */
