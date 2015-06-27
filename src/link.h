@@ -23,7 +23,7 @@
 enum PACKET_TYPE { PT_STATUS = 0x00, PT_JOYSTICK = 0x01, PT_BOOTLOADER = 0x11 };
 
 #define PACKET_TOTAL_SIZE   ((int)sizeof(struct packet))
-#define PACKET_DATA_SIZE    ((int)sizeof(((struct packet*)(0))->data)
+#define PACKET_DATA_SIZE    ((int)sizeof(((struct packet*)(0))->data))
 
 struct packet
 {
@@ -36,14 +36,14 @@ struct packet
             int16_t pitch;
             int16_t roll;
             uint8_t buttons;
-        } joy;
+        } __attribute__((packed)) joy;
 
-        char text[9];
+        uint8_t text[9];
     } data;
-};
+} __attribute__((packed));
 
-typedef int16_t crc_t;
-#define CRC_SIZE 2
+typedef uint8_t crc_t;
+#define CRC_SIZE ((int)sizeof(crc_t))
 
 // TODO docs
 void link_init(void);

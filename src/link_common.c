@@ -20,7 +20,7 @@
 crc_t link_crc(const struct packet* pkt)
 {
     crc_t crc = 0;
-    const char* ptr = (const char*)(pkt);
+    const crc_t* ptr = (const crc_t*)(pkt);
 
     for(unsigned int i = 0; i < PACKET_TOTAL_SIZE; ++i)
         crc ^= ptr[i];

@@ -94,6 +94,8 @@ int joystick_init(const char* device)
     if(pthread_create(&joystick_update_tid, NULL, &joystick_update_thread, NULL))
         return 3;
 
+    MSG("Joystick %s opened\n", device);
+
     return 0;
 }
 

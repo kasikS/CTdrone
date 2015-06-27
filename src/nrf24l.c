@@ -26,6 +26,10 @@
 #include "link.h"
 #include "delay_timer.h"
 
+#ifdef CONTROLLER
+#define SHOW_IRQ
+#endif
+
 ///> Size of tx/rx queues (in bytes)
 #define NRF24L_QUEUE_SIZE   64
 
@@ -491,7 +495,9 @@ static void nrf24l_irq_handler_task(void *parameter)
                                 NRF24L_STATUS_MAX_RT);
 
             if(status & NRF24L_STATUS_RX_DR) {
+#ifdef SHOW_IRQ
                 serial_putc('R');
+#endif
 
                 do {
                     nrf24l_read_fifo(rx_buffer);
@@ -506,7 +512,9 @@ static void nrf24l_irq_handler_task(void *parameter)
             }
 
             if(status & NRF24L_STATUS_TX_DS) {
+#ifdef SHOW_IRQ
                 serial_putc('T');
+#endif
 
                 /*if(!(status & NRF24L_STATUS_TX_FULL))*/
                     /*xSemaphoreGive(nrf24l_tx_sem);*/
@@ -521,7 +529,9 @@ static void nrf24l_irq_handler_task(void *parameter)
             }
 
             if(status & NRF24L_STATUS_MAX_RT) {
+#ifdef SHOW_IRQ
                 serial_putc('E');
+#endif
             }
 
             // Clear IRQ

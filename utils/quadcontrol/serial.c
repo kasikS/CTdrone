@@ -62,7 +62,7 @@ void serial_close(void)
     close(serial_fd);
 }
 
-int serial_write(const char* src, int length)
+int serial_write(const uint8_t* src, int length)
 {
     assert(serial_fd >= 0);
     int ret = write(serial_fd, src, length);
@@ -71,7 +71,7 @@ int serial_write(const char* src, int length)
     return ret;
 }
 
-int serial_read(char* dest, int length)
+int serial_read(uint8_t* dest, int length)
 {
     assert(serial_fd >= 0);
 

@@ -39,9 +39,10 @@ int main(int argc, char **argv)
     struct config conf;
     const char*config_filename;
     struct packet pkt = {0,};
-    char buf[32] = {0,};
+    char buf[64] = {0,};
     int16_t crc;
     int default_cfg = 0;
+    int bad_pkts_cnt = 0;
 
     if(argc == 2 && !strcmp("--help", argv[1])) {
         puts("Usage: quadcontrol [config_file.cfg]");
@@ -101,13 +102,37 @@ int main(int argc, char **argv)
                 pkt.data.joy.pitch, pkt.data.joy.roll,
                 pkt.data.joy.buttons);
 
-        serial_write((const char*) &pkt, PACKET_TOTAL_SIZE);
-        serial_write((const char*) &crc, CRC_SIZE);
+        serial_write((const uint8_t*) &pkt, PACKET_TOTAL_SIZE);
+        serial_write((const uint8_t*) &crc, CRC_SIZE);
+
+        printf("\nsent: ");
+        for(int i = 0; i < PACKET_TOTAL_SIZE; ++i)
+            printf("%.2x ", ((uint8_t*)(&pkt))[i]);
+
+        printf("\tcrc = %.2x", crc);
 
         // Show response from the radio
-        if(serial_read(buf, sizeof(buf)) > 0) {
-            printf("\treceived: %s", buf);
+        int cnt = serial_read(buf, sizeof(buf));
+        if(cnt > 0) {
+            // HEX version
+            printf("\treceived: ");
+            for(int i = 0; i < cnt; ++i)
+                printf("%.2x ", buf[i]);
+
+            // ASCII version
+            printf("  (");
+            for(int i = 0; i < cnt; ++i)
+                printf("%c", buf[i]);
+            printf(")");
+
             memset(buf, 0, sizeof(buf));
+            bad_pkts_cnt = 0;
+        } else {
+            if(++bad_pkts_cnt)
+            {
+                printf("\n!!! CONTROLLER IS NOT RESPONDING !!!\n");
+                //link_init();
+            }
         }
 
         fflush(stdout);

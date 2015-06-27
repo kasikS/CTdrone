@@ -55,8 +55,10 @@ void link_init(void)
         }
     }
 
-    if(serial_read((char*) &crc, CRC_SIZE) != CRC_SIZE)
+    if(serial_read((char*) &crc, CRC_SIZE) != CRC_SIZE) {
+        fprintf(stderr, "have not received crc\n");
         ++errors;
+    }
 
     // Verify the response
     if(pkt.type != PT_STATUS) {

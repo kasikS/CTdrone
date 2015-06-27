@@ -5,6 +5,9 @@
 #include <timers.h>
 #include <queue.h>
 
+#include <stdio.h>
+#include <string.h>
+
 #include "serial.h"
 #include "motor.h"
 #include "nrf24l.h"
@@ -14,7 +17,6 @@
 //#include "drv_hmc5883l.h"
 #include "FlightControl.h"
 #include "link.h"
-
 
 #ifndef CONTROLLER
 void Task_LED_Blink(void *params);
@@ -55,9 +57,8 @@ int main(void)
     i2c_init();
     nrf24l_init();
 
-    serial_puts("siema!");
-
 #ifndef CONTROLLER
+    serial_puts("siema!");
     /*xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);*/
 #endif
     xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
@@ -69,50 +70,60 @@ int main(void)
 #ifdef CONTROLLER
 // Task supposed to run on the module attached to PC as a serial to RF link.
 void radio_task(void *parameters) {
-    struct packet pkt_miso, pkt_mosi;
-    char* ptr_miso = (char*) &pkt_miso;
-    char* ptr_mosi = (char*) &pkt_mosi;
-    int cnt_miso = 0, cnt_mosi = 0;
+    // Buffers to store rx/tx data
+    uint8_t buf_mosi[PACKET_TOTAL_SIZE + CRC_SIZE] = {0,};
+    uint8_t buf_miso[PACKET_TOTAL_SIZE + CRC_SIZE] = {0,};
+
+    // Pointers to ease buffer management
+    uint8_t* ptr_mosi = buf_mosi;
+    struct packet* pkt_miso = (struct packet*) buf_miso;
+    const struct packet const* pkt_mosi = (struct packet*) buf_mosi;
+    crc_t* crc_miso = (crc_t*) &buf_miso[PACKET_TOTAL_SIZE];
+    const crc_t const* crc_mosi = (crc_t*) &buf_mosi[PACKET_TOTAL_SIZE];
+    int cnt_mosi = 0;
+
+    uint8_t buf[16];
 
     // mosi = serial
     // miso = rf
 
-    crc_t crc;
-
     while(1) {
-        while(serial_getc(ptr_mosi)) {
-            ++cnt_mosi;
-            ++ptr_mosi;
+        if(serial_getc((char*)ptr_mosi)) {
+            ++cnt_mosi; ++ptr_mosi;
 
-            if(cnt_mosi == PACKET_TOTAL_SIZE) { // now we should receive crc
-                ptr_mosi = (char*) &crc;
-            }
-            else if(cnt_mosi == PACKET_TOTAL_SIZE + 2) {  // serial port sends crc too
-                // Correct packet from serial port
+            if(cnt_mosi == PACKET_TOTAL_SIZE + CRC_SIZE) {  // serial port sends crc too
+                // Got a full packet (and crc) from the serial port
                 GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
 
                 // Reset pointer to receive next packet
                 cnt_mosi = 0;
-                ptr_mosi = (char*) &pkt_mosi;
+                ptr_mosi = buf_mosi;
 
-                if(crc != link_crc(&pkt_mosi))       // invalid packet, skip
+                if(*crc_mosi != link_crc(pkt_mosi)) {      // invalid packet, skip
+                    sprintf(buf, "CRCXX%.2x", *crc_mosi);
+                    serial_write((char*)buf, 7);
                     continue;
+                }
 
-                // TODO send through rf link
-
-                // TODO tx through rf (without crc), send reply through the serial port
-                // TODO error message through serial port
-                switch(pkt_mosi.type) {
+                // Transmit through rf (without crc), send reply through the serial port
+                switch(pkt_mosi->type) {
                     case PT_STATUS:
-                        pkt_miso.type = PT_STATUS;
-                        strncpy(pkt_miso.data.text, "CTDrone10", 9);
-                        crc = link_crc(&pkt_miso);
-                        serial_write((const char*) &pkt_miso, PACKET_TOTAL_SIZE);
-                        serial_write((const char*) &crc, CRC_SIZE);
+                        for(int i = 0; i < PACKET_DATA_SIZE; ++i) {
+                            if(pkt_mosi->data.text[i] != 0x00) // TODO err msg
+                                serial_puts("XXX");
+                                continue;       // incorrect status query
+                        }
+
+                        pkt_miso->type = PT_STATUS;
+                        strncpy((char*)pkt_miso->data.text, "CTDrone10\x0", PACKET_DATA_SIZE);
+                        *crc_miso = link_crc(pkt_miso);
+                        serial_write((const char*) pkt_miso, PACKET_TOTAL_SIZE + CRC_SIZE);
                         break;
 
                     default:
-                        nrf24l_write((const char*)&pkt_mosi, PACKET_TOTAL_SIZE);
+                        /*sprintf(buf, "CRCOK%.2x", *crc_mosi);*/
+                        /*serial_write((char*)buf, 7);*/
+                        nrf24l_write((const char*)pkt_mosi, PACKET_TOTAL_SIZE);
                         break;
                 }
             }
@@ -129,7 +140,7 @@ void radio_task(void *parameters) {
     uint8_t buf_count;
     struct packet* pkt = (struct packet*) &buf;
 
-    char tmp[64] = "dupa";
+    char tmp[32] = "dupa";
 
     while(1){
 
@@ -144,6 +155,7 @@ void radio_task(void *parameters) {
                         /*pkt->data.joy.throttle, pkt->data.joy.yaw,*/
                         /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
                         /*pkt->data.joy.buttons);*/
+                sprintf(tmp, "%d\r\n", pkt->data.joy.throttle);
                 serial_puts(tmp);
                 /*serial_puts("\r\n");*/
             }

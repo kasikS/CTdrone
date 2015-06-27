@@ -19,11 +19,12 @@
 #define SERIAL_H
 
 #include <termios.h>
+#include <stdint.h>
 
 // TODO docs
 int serial_init(const char* path, speed_t baud);
 void serial_close(void);
-int serial_write(const char* src, int length);
-int serial_read(char* dest, int length);
+int serial_write(const uint8_t* src, int length);
+int serial_read(uint8_t* dest, int length);
 
 #endif /* SERIAL_H */
