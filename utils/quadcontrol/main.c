@@ -125,11 +125,13 @@ int main(int argc, char **argv)
                 printf("%c", buf[i]);
             printf(")");
 
+            if(cnt == 1 && buf[0] == 'E')
+                printf("\n!!! DRONE IS NOT RESPONDING !!!\n");
+
             memset(buf, 0, sizeof(buf));
             bad_pkts_cnt = 0;
         } else {
-            if(++bad_pkts_cnt)
-            {
+            if(++bad_pkts_cnt) {
                 printf("\n!!! CONTROLLER IS NOT RESPONDING !!!\n");
                 //link_init();
             }
