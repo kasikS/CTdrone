@@ -32,10 +32,10 @@ struct packet
     union {             // be sure to have all fields with PACKET_DATA_SIZE length
         struct {
             int16_t throttle;
-            int16_t roll;
-            int16_t pitch;
             int16_t yaw;
-            int8_t buttons;
+            int16_t pitch;
+            int16_t roll;
+            uint8_t buttons;
         } joy;
 
         char text[9];

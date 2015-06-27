@@ -46,7 +46,6 @@ struct axis_calibration
 // TODO desc
 int joystick_init(const char* device);
 void joystick_close(void);
-int joystick_update(void);
 
 void joystick_calibrate(struct axis_calibration *calibration);
 void joystick_set_axis_mapping(int *mapping);

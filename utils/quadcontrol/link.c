@@ -25,6 +25,9 @@
 #include "serial.h"
 #include "debug.h"
 
+// I do not know why I keep getting warnings about implicit usleep declaration..
+extern int usleep(int usec);
+
 void link_init(void)
 {
     struct packet pkt;
@@ -52,7 +55,7 @@ void link_init(void)
         }
     }
 
-    if(serial_read((char*) &crc, CRC_SIZE) != 2)       // TODO lame
+    if(serial_read((char*) &crc, CRC_SIZE) != CRC_SIZE)
         ++errors;
 
     // Verify the response

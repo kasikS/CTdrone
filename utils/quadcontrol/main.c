@@ -28,8 +28,11 @@
 
 // http://www.modelflight.com.au/blog/how-to-fly-remote-control-quadcopter/
 
+// I do not know why I keep getting warnings about implicit usleep declaration..
+extern int usleep(int usec);
+
 void sig_handler(int signo);
-static int active = 0;
+static volatile int active = 0;
 
 int main(int argc, char **argv)
 {
@@ -84,8 +87,6 @@ int main(int argc, char **argv)
 
     active = 1;
     while(active) {
-        joystick_update();
-
         // Prepare & send a packet
         pkt.type = PT_JOYSTICK;
         pkt.data.joy.throttle =  joystick_get_control_val(THROTTLE_AXIS);
@@ -95,7 +96,7 @@ int main(int argc, char **argv)
         pkt.data.joy.buttons  =  joystick_get_buttons();
         crc = link_crc(&pkt);
 
-        printf("\rthrottle: %6d\tyaw:%6d\tpitch:%6d\troll:%6d\tbuttons:%6d",
+        printf("\nthrottle: %6d\tyaw:%6d\tpitch:%6d\troll:%6d\tbuttons:%6d",
                 pkt.data.joy.throttle, pkt.data.joy.yaw,
                 pkt.data.joy.pitch, pkt.data.joy.roll,
                 pkt.data.joy.buttons);
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
         }
 
         fflush(stdout);
+        usleep(20000);
     }
 
     serial_close();

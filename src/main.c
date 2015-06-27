@@ -15,8 +15,11 @@
 #include "FlightControl.h"
 #include "link.h"
 
+
+#ifndef CONTROLLER
 void Task_LED_Blink(void *params);
-void radio_task(void *params);
+#endif
+void radio_task(void *parameters);
 
 void delay(uint32_t ms)
 {
@@ -54,70 +57,103 @@ int main(void)
 
     serial_puts("siema!");
 
+#ifndef CONTROLLER
     /*xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);*/
+#endif
     xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
     vTaskStartScheduler();
 
     while(1);
 }
 
-void nrf24l_tx_direct(uint8_t*);
-
+#ifdef CONTROLLER
+// Task supposed to run on the module attached to PC as a serial to RF link.
 void radio_task(void *parameters) {
-#ifdef NRF24L_MASTER
-    serial_puts("master\r\n");
-    #define NRF24L_TX
-    #define NRF24L_RX
-    int cnt = 0;
-#else
+    struct packet pkt_miso, pkt_mosi;
+    char* ptr_miso = (char*) &pkt_miso;
+    char* ptr_mosi = (char*) &pkt_mosi;
+    int cnt_miso = 0, cnt_mosi = 0;
+
+    // mosi = serial
+    // miso = rf
+
+    crc_t crc;
+
+    while(1) {
+        while(serial_getc(ptr_mosi)) {
+            ++cnt_mosi;
+            ++ptr_mosi;
+
+            if(cnt_mosi == PACKET_TOTAL_SIZE) { // now we should receive crc
+                ptr_mosi = (char*) &crc;
+            }
+            else if(cnt_mosi == PACKET_TOTAL_SIZE + 2) {  // serial port sends crc too
+                // Correct packet from serial port
+                GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+
+                // Reset pointer to receive next packet
+                cnt_mosi = 0;
+                ptr_mosi = (char*) &pkt_mosi;
+
+                if(crc != link_crc(&pkt_mosi))       // invalid packet, skip
+                    continue;
+
+                // TODO send through rf link
+
+                // TODO tx through rf (without crc), send reply through the serial port
+                // TODO error message through serial port
+                switch(pkt_mosi.type) {
+                    case PT_STATUS:
+                        pkt_miso.type = PT_STATUS;
+                        strncpy(pkt_miso.data.text, "CTDrone10", 9);
+                        crc = link_crc(&pkt_miso);
+                        serial_write((const char*) &pkt_miso, PACKET_TOTAL_SIZE);
+                        serial_write((const char*) &crc, CRC_SIZE);
+                        break;
+
+                    default:
+                        nrf24l_write((const char*)&pkt_mosi, PACKET_TOTAL_SIZE);
+                        break;
+                }
+            }
+        }
+    }
+}
+#else /* CONTROLLER */
+// Task supposed to be running on the quadcopter
+void radio_task(void *parameters) {
     serial_puts("echo\r\n");
-    #define NRF24L_ECHO
-#endif
 
     char c;
-    uint8_t buf[] = "nrf24_0000";
+    uint8_t buf[PACKET_TOTAL_SIZE];
     uint8_t buf_count;
+    struct packet* pkt = (struct packet*) &buf;
+
+    char tmp[64] = "dupa";
 
     while(1){
 
-#ifdef NRF24L_TX
-        nrf24l_write(buf, PACKET_TOTAL_SIZE);
-        if(++buf[7] == ':') {
-            buf[7] = '0';
-
-            if(++buf[6] == ':')
-                buf[6] = '0';
-        }
-#endif
-
-#ifdef NRF24L_RX
         while(nrf24l_getc(&c)) {
-            serial_putc(c);
-
-            if(++cnt == PACKET_TOTAL_SIZE) {
-                cnt = 0;
-                serial_puts("\r\n");
-            }
-        }
-#endif
-
-#ifdef NRF24L_ECHO
-        while(nrf24l_getc(&c)) {
-            serial_putc(c);
+            /*serial_putc(c);*/
             buf[buf_count++] = c;
 
             if(buf_count == PACKET_TOTAL_SIZE) {
                 buf_count = 0;
-                serial_puts("\r\n");
-                nrf24l_write(buf, PACKET_TOTAL_SIZE);
+
+                /*sprintf(tmp, "%d %d %d %d %d\r\n",*/
+                        /*pkt->data.joy.throttle, pkt->data.joy.yaw,*/
+                        /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
+                        /*pkt->data.joy.buttons);*/
+                serial_puts(tmp);
+                /*serial_puts("\r\n");*/
             }
         }
-#endif
 
         GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
         vTaskDelay(200);
     }
 }
+#endif /* else CONTROLLER */
 
 void Task_LED_Blink(void *parameters) {
     vTaskDelay(500);

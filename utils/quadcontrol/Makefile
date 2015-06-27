@@ -13,7 +13,7 @@ OBJS = $(SRCS:.c=.o)
 
 CFLAGS = -ggdb -O0 -std=c99 -DDEBUG -I. -I../../src
 WFLAGS = -Wall -Wextra -Warray-bounds -Wno-unused-parameter -Wno-unused-function
-LFLAGS =
+LFLAGS = -lpthread
 
 .PHONY: all
 all: $(PROJECT)

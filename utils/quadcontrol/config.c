@@ -149,7 +149,7 @@ int config_save(const char* filename, struct config* conf)
 int config_default(struct config* conf)
 {
     strcpy(conf->serial_device, "/dev/ttyACM0");
-    conf->serial_speed = B115200;
+    conf->serial_speed = B460800;
 
     strcpy(conf->joystick_device, "/dev/input/js0");
 
@@ -201,6 +201,6 @@ void config_compute_joy_scales(struct config* conf)
         axis->scale_neg = (float) axis->target_min / (axis->device_min - axis->scale_neg);
         axis->scale_pos = (float) axis->target_max / (axis->device_max - axis->scale_pos);
 
-        printf("axis %d scale = %f, %f\n", i, axis->scale_neg, axis->scale_pos);
+        /*printf("axis %d scale = %f, %f\n", i, axis->scale_neg, axis->scale_pos);*/
     }
 }

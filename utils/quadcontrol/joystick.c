@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
+#include <pthread.h>
 #include <linux/joystick.h>
 
 #include "joystick.h"
@@ -39,14 +40,39 @@ static struct joystick
     struct axis_calibration *calibration;
 } joy;
 
-int joystick_init(const char* device)
+/*static pthread_mutex_t js_update_mtx;*/
+static pthread_t joystick_update_tid;
+static volatile int joystick_update_active = 1;
+static void* joystick_update_thread(void* param)
 {
-    if((joy.fd = open(device, O_RDONLY)) < 0) {
-        return 1;
+    struct js_event js;
+
+    while(joystick_update_active) {
+        if(read(joy.fd, &js, sizeof(struct js_event)) != sizeof(struct js_event)) {
+            fprintf(stderr, "error reading joystick event data\n");
+            return NULL;
+        }
+
+        /*pthread_mutex_lock(&js_update_mtx);*/
+        switch(js.type & ~JS_EVENT_INIT) {
+            case JS_EVENT_BUTTON:
+                joy.button[js.number] = js.value;
+                break;
+            case JS_EVENT_AXIS:
+                joy.axis[js.number] = js.value;
+                break;
+        }
+        /*pthread_mutex_unlock(&js_update_mtx);*/
     }
 
-    joy.axis = 0;
-    joy.button = 0;
+    return NULL;
+}
+
+int joystick_init(const char* device)
+{
+    if((joy.fd = open(device, O_RDONLY)) < 0)
+        return 1;
+
     joy.mapping = 0;
     joy.calibration = 0;
 
@@ -62,33 +88,23 @@ int joystick_init(const char* device)
     joy.axis = calloc(joy.axes, sizeof(int));
     joy.button = calloc(joy.buttons, sizeof(char));
 
+    /*if(pthread_mutex_init(&js_update_mtx, NULL))*/
+        /*return 2;*/
+
+    if(pthread_create(&joystick_update_tid, NULL, &joystick_update_thread, NULL))
+        return 3;
+
     return 0;
 }
 
 void joystick_close(void)
 {
+    joystick_update_active = 0;
+    pthread_join(joystick_update_tid, NULL);
+    /*pthread_mutex_destroy(&js_update_mtx);*/
+
     free(joy.axis);
     free(joy.button);
-}
-
-int joystick_update(void)
-{
-    struct js_event js;
-
-    if(read(joy.fd, &js, sizeof(struct js_event)) != sizeof(struct js_event)) {
-        return 1;
-    }
-
-    switch(js.type & ~JS_EVENT_INIT) {
-    case JS_EVENT_BUTTON:
-            joy.button[js.number] = js.value;
-            break;
-    case JS_EVENT_AXIS:
-            joy.axis[js.number] = js.value;
-            break;
-    }
-
-    return 0;
 }
 
 void joystick_calibrate(struct axis_calibration *calibration)
@@ -105,7 +121,6 @@ void joystick_calibrate(struct axis_calibration *calibration)
 
     printf("Leave the joystick controls in the neutral position and press Enter.\n");
     do {
-        joystick_update();
         printf("update\n");
     } while(!key_pressed(&key));
 
@@ -114,8 +129,6 @@ void joystick_calibrate(struct axis_calibration *calibration)
 
     printf("Move joystick controls in circles a few times and press Enter.\n");
     do {
-        joystick_update();
-
         for(int i = 0; i < CONTROLS_NUMBER; ++i) {
             int val = joystick_get_control_raw(i);
 
@@ -153,11 +166,13 @@ int joystick_get_buttons(void)
 
     int ret = 0;
 
+    /*pthread_mutex_lock(&js_update_mtx);*/
     for(int i = 0; i < joy.buttons; ++i) {
         if(joy.button[i]) {
             ret |= (1 << i);
         }
     }
+    /*pthread_mutex_unlock(&js_update_mtx);*/
 
     return ret;
 }
@@ -166,7 +181,12 @@ int joystick_get_control_raw(enum CONTROL control)
 {
     assert(control < CONTROLS_NUMBER);
     assert(joy.mapping);
-    return joy.axis[joy.mapping[control]];
+
+    /*pthread_mutex_lock(&js_update_mtx);*/
+    int retval = joy.axis[joy.mapping[control]];
+    /*pthread_mutex_unlock(&js_update_mtx);*/
+
+    return retval;
 }
 
 int joystick_get_control_val(enum CONTROL control)
@@ -188,6 +208,7 @@ int joystick_get_control_val(enum CONTROL control)
 
 void joystick_print_report(void)
 {
+    /*pthread_mutex_lock(&js_update_mtx);*/
     // Full joystick report
     if(joy.axes) {
         printf("Axes: ");
@@ -200,4 +221,5 @@ void joystick_print_report(void)
         for(int i = 0; i < joy.buttons; i++)
             printf("%2d:%s ", i, joy.button[i] ? "on " : "off");
     }
+    /*pthread_mutex_unlock(&js_update_mtx);*/
 }
