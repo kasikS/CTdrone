@@ -1960,7 +1960,7 @@ static void imu_task(void *parameters){
 //					serial_puts(buf);
 				}
 					//xQueueSend( imu_queue, ( void * ) &CurrentPosition, 0); // if full don't wait? or overwrite?
-
+                        /*vTaskDelay(5);*/
 #endif
 			}
 		}

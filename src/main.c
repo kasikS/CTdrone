@@ -44,7 +44,8 @@ int main(void)
     RCC_ClearFlag();
     NVIC_PriorityGroupConfig( NVIC_PriorityGroup_4 );
 
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7;
+    // TODO remove not necessary pins
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_15;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
@@ -59,9 +60,9 @@ int main(void)
 
 #ifndef CONTROLLER
     serial_puts("siema!");
-    /*xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);*/
+    xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
 #endif
-    xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
+    xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 40, NULL, 2, NULL);
     vTaskStartScheduler();
 
     while(1);
@@ -109,7 +110,7 @@ void radio_task(void *parameters) {
                 switch(pkt_mosi->type) {
                     case PT_STATUS:
                         for(int i = 0; i < PACKET_DATA_SIZE; ++i) {
-                            if(pkt_mosi->data.text[i] != 0x00) // TODO err msg
+                            if(pkt_mosi->data.text[i] != 0x00)
                                 serial_puts("XXX");
                                 continue;       // incorrect status query
                         }
@@ -133,36 +134,35 @@ void radio_task(void *parameters) {
 #else /* CONTROLLER */
 // Task supposed to be running on the quadcopter
 void radio_task(void *parameters) {
-    serial_puts("echo\r\n");
-
     char c;
     uint8_t buf[PACKET_TOTAL_SIZE];
-    uint8_t buf_count;
-    struct packet* pkt = (struct packet*) &buf;
-
-    char tmp[32] = "dupa";
+    uint8_t buf_count = 0;
+    const struct packet const* pkt = (struct packet*) &buf;
+    char tmp[32];
 
     while(1){
-
-        while(nrf24l_getc(&c)) {
-            /*serial_putc(c);*/
+        if(nrf24l_getc(&c)) {
             buf[buf_count++] = c;
 
             if(buf_count == PACKET_TOTAL_SIZE) {
                 buf_count = 0;
 
+                /*for(int i = 0; i < PACKET_TOTAL_SIZE; ++i) {*/
+                    /*sprintf(tmp, "%.2x ", buf[i]);*/
+                    /*serial_puts(tmp);*/
+                /*}*/
+                /*serial_puts("\r\n");*/
+
                 /*sprintf(tmp, "%d %d %d %d %d\r\n",*/
                         /*pkt->data.joy.throttle, pkt->data.joy.yaw,*/
                         /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
                         /*pkt->data.joy.buttons);*/
-                sprintf(tmp, "%d\r\n", pkt->data.joy.throttle);
-                serial_puts(tmp);
-                /*serial_puts("\r\n");*/
+                /*serial_puts(tmp);*/
             }
         }
 
         GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
-        vTaskDelay(200);
+        /*vTaskDelay(5);*/
     }
 }
 #endif /* else CONTROLLER */
@@ -173,21 +173,7 @@ void Task_LED_Blink(void *parameters) {
     vTaskDelay(100);
     flight_control_init();
 
-    int power = 0;
-
     while(1){
-        // Serial port echo
-        /*if(serial_getc(&c))
-            serial_putc(c);*/
-
-        power += 10;
-        if(power == 110)
-            power = 0;
-        motor_set_speed(0, power);
-        motor_set_speed(1, power);
-        motor_set_speed(2, power);
-        motor_set_speed(3, power);
-
         GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
         vTaskDelay(1000);
     }

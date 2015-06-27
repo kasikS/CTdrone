@@ -326,11 +326,11 @@ int nrf24l_init(void)
         return pdFALSE;
 
     if(!xTaskCreate(nrf24l_irq_handler_task, NULL, configMINIMAL_STACK_SIZE, NULL,
-                    tskIDLE_PRIORITY, NULL))
+                    2, NULL))
         return pdFALSE;
 
     if(!xTaskCreate(nrf24l_transmitter_task, NULL, configMINIMAL_STACK_SIZE, NULL,
-                    tskIDLE_PRIORITY, NULL))
+                    2, NULL))
         return pdFALSE;
 
 
@@ -349,7 +349,7 @@ int nrf24l_init(void)
     nrf24l_write_reg(NRF24L_RX_PW_P5, PACKET_TOTAL_SIZE);
 
     // Set data rate and output power // TODO increase power & data rate?
-    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_MIN_6DBM |
+    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_0_DBM |
                                       NRF24L_RF_SET_RF_1MBPS);
 
     // Enable CRC, 2-bytes encoding
@@ -506,9 +506,8 @@ static void nrf24l_irq_handler_task(void *parameter)
                     for(i = 1; i < PACKET_TOTAL_SIZE + 1; ++i)
                         xQueueSend(nrf24l_rx_queue, &rx_buffer[i], NRF24L_TICKS_WAIT);
 
-                    status = nrf24l_get_fifo_status();
-                }
-                while(!(status & NRF24L_FIFO_STAT_RX_EMPTY));
+                    status = rx_buffer[0];
+                } while(!(status & NRF24L_FIFO_STAT_RX_EMPTY));
             }
 
             if(status & NRF24L_STATUS_TX_DS) {

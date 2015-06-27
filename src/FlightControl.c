@@ -127,14 +127,14 @@ void ProcessFlightControl(void){
 			int_roll=(imu_position.roll*1000*180.0f/M_PI);
 
 			xSemaphoreGive(imu_data_update);
-
+/* //DEBUG
 			sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
 			serial_puts(buf);
 			sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
 			serial_puts(buf);
 			sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
 			serial_puts(buf);
-
+*/
 		}
     }
 
