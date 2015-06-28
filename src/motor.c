@@ -38,7 +38,7 @@ const int MAX_SPEED = 2000;
 // One millisecond [counter units]
 #define MILLISECOND ((uint32_t)(MAX_DUTY / (PERIOD * 1000)))
 
-#define LED_TEST
+/*#define LED_TEST*/
 
 xQueueHandle motors_queue;
 static void motors_task(void *parameters);
