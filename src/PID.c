@@ -26,11 +26,12 @@ float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 	// it cant help be cold despite its best efforts)
 	// not necessary, but this makes windup guard values
 	// relative to the current iGain
-	windupGuard = WINDUP_GUARD_GAIN / PIDval->igain;
-	if (PIDval->iState > windupGuard)
-		PIDval->iState = windupGuard;
-	else if (PIDval->iState < -windupGuard)
-		PIDval->iState = -windupGuard;
+
+//	windupGuard = WINDUP_GUARD_GAIN / PIDval->igain;
+//	if (PIDval->iState > windupGuard)
+//		PIDval->iState = windupGuard;
+//	else if (PIDval->iState < -windupGuard)
+//		PIDval->iState = -windupGuard;
 
 	PIDval->iTerm = PIDval->igain * PIDval->iState;
 	// the dTerm, the difference between the temperature now

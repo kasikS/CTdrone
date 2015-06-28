@@ -20,8 +20,9 @@
 
 #ifndef CONTROLLER
 void Task_LED_Blink(void *params);
+#else
+void controller_task(void *parameters);
 #endif
-void radio_task(void *parameters);
 
 void delay(uint32_t ms)
 {
@@ -54,15 +55,18 @@ int main(void)
 
     delay_init();
     serial_init(460800);
+
+#ifdef CONTROLLER
+    xTaskCreate(controller_task, NULL, configMINIMAL_STACK_SIZE + 40, NULL, 2, NULL);
+#else
     motor_init();
     i2c_init();
     nrf24l_init();
 
-#ifndef CONTROLLER
     serial_puts("siema!");
     xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
 #endif
-    xTaskCreate(radio_task, NULL, configMINIMAL_STACK_SIZE + 40, NULL, 2, NULL);
+
     vTaskStartScheduler();
 
     while(1);
@@ -70,7 +74,7 @@ int main(void)
 
 #ifdef CONTROLLER
 // Task supposed to run on the module attached to PC as a serial to RF link.
-void radio_task(void *parameters) {
+void controller_task(void *parameters) {
     // Buffers to store rx/tx data
     uint8_t buf_mosi[PACKET_TOTAL_SIZE + CRC_SIZE] = {0,};
     uint8_t buf_miso[PACKET_TOTAL_SIZE + CRC_SIZE] = {0,};
@@ -131,41 +135,7 @@ void radio_task(void *parameters) {
         }
     }
 }
-#else /* CONTROLLER */
-// Task supposed to be running on the quadcopter
-void radio_task(void *parameters) {
-    char c;
-    uint8_t buf[PACKET_TOTAL_SIZE];
-    uint8_t buf_count = 0;
-    const struct packet const* pkt = (struct packet*) &buf;
-    char tmp[32];
-
-    while(1){
-        if(nrf24l_getc(&c)) {
-            buf[buf_count++] = c;
-
-            if(buf_count == PACKET_TOTAL_SIZE) {
-                buf_count = 0;
-
-                /*for(int i = 0; i < PACKET_TOTAL_SIZE; ++i) {*/
-                    /*sprintf(tmp, "%.2x ", buf[i]);*/
-                    /*serial_puts(tmp);*/
-                /*}*/
-                /*serial_puts("\r\n");*/
-
-                /*sprintf(tmp, "%d %d %d %d %d\r\n",*/
-                        /*pkt->data.joy.throttle, pkt->data.joy.yaw,*/
-                        /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
-                        /*pkt->data.joy.buttons);*/
-                /*serial_puts(tmp);*/
-            }
-        }
-
-        GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
-        /*vTaskDelay(5);*/
-    }
-}
-#endif /* else CONTROLLER */
+#endif /* CONTROLLER */
 
 void Task_LED_Blink(void *parameters) {
     vTaskDelay(500);

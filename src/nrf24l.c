@@ -499,15 +499,11 @@ static void nrf24l_irq_handler_task(void *parameter)
                 serial_putc('R');
 #endif
 
-                do {
-                    nrf24l_read_fifo(rx_buffer);
+                nrf24l_read_fifo(rx_buffer);
 
-                    // rx_buffer[0] contains status, start with rx_buffer[1]
-                    for(i = 1; i < PACKET_TOTAL_SIZE + 1; ++i)
-                        xQueueSend(nrf24l_rx_queue, &rx_buffer[i], NRF24L_TICKS_WAIT);
-
-                    status = rx_buffer[0];
-                } while(!(status & NRF24L_FIFO_STAT_RX_EMPTY));
+                // rx_buffer[0] contains shit, start with rx_buffer[1]
+                for(i = 1; i < PACKET_TOTAL_SIZE + 1; ++i)
+                    xQueueSend(nrf24l_rx_queue, &rx_buffer[i], NRF24L_TICKS_WAIT);
             }
 
             if(status & NRF24L_STATUS_TX_DS) {

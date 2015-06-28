@@ -1302,9 +1302,9 @@ return 0;
  * 3. rotate around sensor X plane by roll
  */
 void mpu6050_getYawPitchRoll(quaternion *quat, angles *angle, axis *gravity) {
-	angle->yaw =   atan2(2*(quat->qx)*(quat->qy) - 2*(quat->qw)*(quat->qz), 2*(quat->qw)*(quat->qw) + 2*(quat->qx)*(quat->qx) - 1);
+	angle->yaw =   atan2(2*(quat->qx)*(quat->qy) - 2*(quat->qw)*(quat->qz), 2*(quat->qw)*(quat->qw) + 2*(quat->qx)*(quat->qx) - 1); //positive values to the right
 	angle->pitch = atan((gravity->x) / sqrt((gravity->y)*(gravity->y) + (gravity->z)*(gravity->z)));
-	angle->roll =  atan((gravity->y) / sqrt((gravity->x)*(gravity->x) + (gravity->z)*(gravity->z)));
+	angle->roll =  -(atan((gravity->y) / sqrt((gravity->x)*(gravity->x) + (gravity->z)*(gravity->z)))); //negative values when left side is up
 }
 
 uint8_t mpu6050_getEuler(float *data, quaternion *quat) {
@@ -1923,6 +1923,16 @@ static void imu_task(void *parameters){
 				}
 				// read a packet from FIFO
 			 	mpu6050_getFIFOBytes(fifoBuffer, dmpPacketSize);
+//
+//			 	 int16_t a = (fifoBuffer[0] << 8) + fifoBuffer[1];
+//			 	 int16_t b = (fifoBuffer[4] << 8) + fifoBuffer[5];
+//			 	 int16_t c = (fifoBuffer[8] << 8) + fifoBuffer[9];
+//			 	 int16_t d = (fifoBuffer[12] << 8) + fifoBuffer[13];
+//
+//			 	sprintf(buf, "%x %x %x %x\r\n", a, b, c, d);
+//			 	serial_puts(buf);
+
+
 				GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
 				// track FIFO count here in case there is > 1 packet available
 				// (this lets us immediately read more without waiting for an interrupt)
@@ -1960,7 +1970,7 @@ static void imu_task(void *parameters){
 //					serial_puts(buf);
 				}
 					//xQueueSend( imu_queue, ( void * ) &CurrentPosition, 0); // if full don't wait? or overwrite?
-                        /*vTaskDelay(5);*/
+
 #endif
 			}
 		}

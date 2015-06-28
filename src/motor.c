@@ -26,8 +26,8 @@
 
 #define MOTORS_QUEUE_SIZE   64
 
-const int MIN_SPEED = 0;
-const int MAX_SPEED = 100;
+const int MIN_SPEED = 1000;
+const int MAX_SPEED = 2000;
 
 // Timer frequency [Hz]
 #define TIMER_CLK   3200000
@@ -123,17 +123,17 @@ void motor_set_speed(int m, int speed)
     // min speed for tHI = 1 ms
     // max speed for tHI = 2 ms
 #ifdef LED_TEST
-    int val = speed * 20 * MILLISECOND / MAX_SPEED;
+    int val = (speed - 1000) / 50.0 * MILLISECOND;
 #else
-    int val = speed * MILLISECOND / MAX_SPEED + MILLISECOND;
+    int val = (speed / 1000.0) * MILLISECOND; // / MAX_SPEED + MILLISECOND;
 #endif
 
     switch(m)
     {
-        case MOTOR_FL: TIM_SetCompare1(TIM1, val); break;
-        case MOTOR_FR: TIM_SetCompare2(TIM1, val); break;
-        case MOTOR_BL: TIM_SetCompare3(TIM1, val); break;
-        case MOTOR_BR: TIM_SetCompare4(TIM1, val); break;
+        case MOTOR_BL: TIM_SetCompare1(TIM1, val); break;
+        case MOTOR_FL: TIM_SetCompare2(TIM1, val); break;
+        case MOTOR_BR: TIM_SetCompare3(TIM1, val); break;
+        case MOTOR_FR: TIM_SetCompare4(TIM1, val); break;
     }
 
     motor_speed[m] = speed;

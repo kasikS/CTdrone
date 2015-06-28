@@ -13,6 +13,8 @@
 #include "PID.h"
 #include "motor.h"
 #include "drv_mpu6050.h"
+#include "nrf24l.h"
+#include "link.h"
 #include <stdio.h>
 
 #include "serial.h"
@@ -31,15 +33,16 @@ extern xQueueHandle motors_queue;
 #define FLIGHT_CONTROL_QUEUE_SIZE   64
 static void flight_control_task(void *parameters);
 
+xSemaphoreHandle command_rdy, command_update;
+volatile angles target_position;
+volatile throttle = 0;
+static void command_rx_task(void *parameters);
+
 PID levelRollPID;// = PID(6.1, 0.0, 0.9);
 PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
 PID levelYawPID; // = PID(6.0, 0, 0.0);
 
-// check the delta time
-//currentTime = micros();
-//deltaTime = currentTime - previousTime;
-//previousTime = currentTime;
-float deltat;
+
 
 
 int flight_control_init(void){
@@ -56,128 +59,195 @@ int flight_control_init(void){
 	levelYawPID.igain=0;
 	levelYawPID.dgain=0;
 
+        target_position.yaw = 0;
+        target_position.pitch = 0;
+        target_position.roll = 0;
+        throttle = 0;
+
+	 command_rdy = xSemaphoreCreateBinary();
+	 if(command_rdy == NULL)
+		 return pdFALSE;
+
+	 command_update = xSemaphoreCreateMutex();
+	 if(command_update == NULL)
+		 return pdFALSE;
 
 	    portBASE_TYPE ret = xTaskCreate(flight_control_task, NULL,
 	                                    256, NULL, 2, NULL);
 	    if(ret != pdPASS)
 	        return pdFALSE;
 
+	    if(xTaskCreate(command_rx_task, NULL,
+	                                    256, NULL, 2, NULL) != pdPASS)
+                return pdFALSE;
 
 	    return pdTRUE;
 }
 
-void ProcessFlightControl(void){
+void ProcessFlightControl(float deltat){
 
-//	static angles CurrentPosition;
-	static angles TargetPosition;
+	static angles CurrentPosition;
+	static angles TargetPosition = {0.0f, 0.0f, 0.0f};
 	angles CorrectPosition;
 	speed MotorsSpeed;
 	char buf[32] = {0,};
 	int int_yaw;
 	int int_pitch;
 	int int_roll;
-	//if(xQueueReceive(imu_queue, &CurrentPosition, 0))
+	static int cnt =0;
 
 	if(xSemaphoreTake(imu_data_rdy, 0))
     {
 		if(xSemaphoreTake(imu_data_update, 0))
 		{
-//			int_yaw=(imu_position.yaw);
-//			int_pitch=(imu_position.pitch);
-//			int_roll=(imu_position.roll);
-//
-//			sprintf(buf, "%d,", int_yaw);
-//			serial_puts(buf);
-//			sprintf(buf, "%d,", int_pitch);
-//			serial_puts(buf);
-//			sprintf(buf, "%d\r\n", int_roll);
-//			serial_puts(buf);
-
-
-//			const float factor = 180000.0 / M_PI;
-//
-//			int_yaw=(int)(imu_position.yaw*1000);
-//			int_pitch=(int)(imu_position.pitch*1000);
-//			int_roll=(int)(imu_position.roll*1000);
-//
-//			xSemaphoreGive(imu_data_update);
-//
-//			sprintf(buf, "%d,", int_yaw);
-//			serial_puts(buf);
-//			sprintf(buf, "%d,", int_pitch);
-//			serial_puts(buf);
-//			sprintf(buf, "%d\r\n", int_roll);
-//			serial_puts(buf);
-
-
-//
-//			sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
-//			serial_puts(buf);
-//			sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
-//			serial_puts(buf);
-//			sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
-//			serial_puts(buf);
-
-
-
-
-
-			int_yaw=(imu_position.yaw*1000*180.0f/M_PI);
-			int_pitch=(imu_position.pitch*1000*180.0f/M_PI);
-			int_roll=(imu_position.roll*1000*180.0f/M_PI);
+			// ccw negative, cw positive
+			CurrentPosition.yaw=(imu_position.yaw*180.0f/M_PI);
+			// down negative, up positive
+			CurrentPosition.pitch=(imu_position.pitch*180.0f/M_PI);
+			// left side up negative, right side up positive
+			CurrentPosition.roll=(imu_position.roll*180.0f/M_PI);
 
 			xSemaphoreGive(imu_data_update);
-/* //DEBUG
-			sprintf(buf, "%d.%03d,", int_yaw / 1000, abs(int_yaw) % 1000);
-			serial_puts(buf);
-			sprintf(buf, "%d.%03d,", int_pitch / 1000, abs(int_pitch) % 1000);
-			serial_puts(buf);
-			sprintf(buf, "%d.%03d\r\n", int_roll/ 1000, abs(int_roll) % 1000);
-			serial_puts(buf);
-*/
+
+			/*sprintf(buf, "%d,%d,%d\r\n", (int) CurrentPosition.yaw, (int) CurrentPosition.pitch, (int) CurrentPosition.roll);*/
+			/*serial_puts(buf);*/
 		}
     }
 
-//	if(xQueueReceive(rf_queue, &TargetPosition, RF_TICKS_WAIT))
-//    {
-//    	serial_puts("target");
-//    }
+	if(xSemaphoreTake(command_rdy, 0))
+    {
+		if(xSemaphoreTake(command_update, 0))
+		{
+			TargetPosition.yaw=target_position.yaw;
+			TargetPosition.pitch=target_position.pitch;
+			TargetPosition.roll=target_position.roll;
 
+                        sprintf(buf, "%d,", (int) throttle);
+                        serial_puts(buf);
+                        sprintf(buf, "%d,", (int) TargetPosition.yaw);
+                        serial_puts(buf);
+                        sprintf(buf, "%d,", (int) TargetPosition.pitch);
+                        serial_puts(buf);
+                        sprintf(buf, "%d\r\n", (int) TargetPosition.roll);
+                        serial_puts(buf);
 
-	/*
+			xSemaphoreGive(command_update);
+		}
+    }
+
+// negaitve value means left side is up
 	CorrectPosition.roll = PIDupdate(&levelRollPID, TargetPosition.roll, constrain(CurrentPosition.roll, -50, 50), deltat);
 	// Positive values mean the frontend is up
 	// Constrain to 45 degrees, because beyond that, we're fucked anyway
 	CorrectPosition.pitch = PIDupdate(&levelPitchPID,TargetPosition.pitch, constrain(CurrentPosition.pitch, -50, 50), deltat);
-	// Positive values are to the right
-	CorrectPosition.yaw = PIDupdate(&levelRollPID, TargetPosition.yaw, CurrentPosition.yaw, deltat);
+	// Positive values are to the left
+	CorrectPosition.yaw = PIDupdate(&levelYawPID, TargetPosition.yaw, CurrentPosition.yaw, deltat);
 	// Apply offsets to all motors evenly to ensure we pivot on the center
 
+	//char buf[16]={0,};
+//	sprintf(buf, "%d\r\n", deltat);
+//	serial_puts(buf);
+
 	//check first if engines are in move..
-		motor_set_speed(MOTOR_FL, motor_get_speed(MOTOR_FL) - rollAdjust - pitchAdjust + yawAdjust);
-		motor_set_speed(MOTOR_FR, motor_get_speed(MOTOR_FR) + rollAdjust - pitchAdjust - yawAdjust);
-		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
-		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
-*/
+//		motor_set_speed(MOTOR_FL, motor_get_speed(MOTOR_FL) - rollAdjust - pitchAdjust + yawAdjust);
+//		motor_set_speed(MOTOR_FR, motor_get_speed(MOTOR_FR) + rollAdjust - pitchAdjust - yawAdjust);
+//		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
+//		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
 
-//	MotorsSpeed.fl = motor_get_speed(MOTOR_FL) - CorrectPosition.roll - CorrectPosition.pitch + CorrectPosition.yaw;
-//	MotorsSpeed.fr = motor_get_speed(MOTOR_FR) + CorrectPosition.roll - CorrectPosition.pitch - CorrectPosition.yaw;
-//	MotorsSpeed.bl = motor_get_speed(MOTOR_BL) - CorrectPosition.roll + CorrectPosition.pitch - CorrectPosition.yaw;
-//	MotorsSpeed.br = motor_get_speed(MOTOR_BR) + CorrectPosition.roll + CorrectPosition.pitch + CorrectPosition.yaw;
+	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch - CorrectPosition.yaw;
+	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch + CorrectPosition.yaw;
+	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch + CorrectPosition.yaw;
+	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch - CorrectPosition.yaw;
 
-//	if((TargetPosition.pitch!=CurrentPosition.pitch)||(TargetPosition.roll!=CurrentPosition.roll)||(TargetPosition.yaw!=CurrentPosition.yaw))
-//	{
-//		xQueueSend( motors_queue, ( void * ) &MotorsSpeed, 0);
-//	}
+        // TODO orson: uncomment?
+	/*if((TargetPosition.pitch!=CurrentPosition.pitch)||(TargetPosition.roll!=CurrentPosition.roll)||(TargetPosition.yaw!=CurrentPosition.yaw))*/
+	{
+		++cnt;
+		/*if(cnt >= 100) {
+			sprintf(buf, "%d\t%d\t%d\t%d\r\n", MotorsSpeed.fl, MotorsSpeed.fr, MotorsSpeed.bl, MotorsSpeed.br);
+			serial_puts(buf);
+			cnt = 0;
+		}
+		*/
 
+		//xQueueSend( motors_queue, ( void * ) &MotorsSpeed, 0);
+
+        motor_set_speed(MOTOR_FL, MotorsSpeed.fl);
+        motor_set_speed(MOTOR_FR, MotorsSpeed.fr);
+        motor_set_speed(MOTOR_BL, MotorsSpeed.bl);
+        motor_set_speed(MOTOR_BR, MotorsSpeed.br);
+	}
 }
 
 
 static void flight_control_task(void *parameters)
 {
+	portTickType previousTime=0;
+	portTickType currentTime=0;
+	portTickType deltaTime=0;
+	float deltat;
+
+	previousTime = xTaskGetTickCount();
+
 	while(1){
-		ProcessFlightControl();
+		currentTime = xTaskGetTickCount(); ///configTICK_RATE_HZ;
+		deltaTime = currentTime - previousTime;
+//		char buf[16]={0,};
+//		sprintf(buf, "delta %d\r\n", deltaTime);
+//		serial_puts(buf);
+
+		previousTime = currentTime;
+	//	deltat=deltaTime/configTICK_RATE_HZ; //time in seconds
+		deltat=deltaTime* portTICK_RATE_MS * 1000; //time in seconds
+
+		ProcessFlightControl(deltat);
 		GPIO_ToggleBits(GPIOA, GPIO_Pin_6);
 
+		vTaskDelay(1);
 	}
+}
+
+
+static void command_rx_task(void *parameters)
+{
+    char c;
+    uint8_t buf[PACKET_TOTAL_SIZE];
+    uint8_t buf_count = 0;
+    const struct packet const* pkt = (struct packet*) &buf;
+    char tmp[32];
+
+    while(1){
+        if(nrf24l_getc(&c)) {
+            buf[buf_count++] = c;
+
+            if(buf_count == PACKET_TOTAL_SIZE) {
+                buf_count = 0;
+
+                /*for(int i = 0; i < PACKET_TOTAL_SIZE; ++i) {*/
+                    /*sprintf(tmp, "%.2x ", buf[i]);*/
+                    /*serial_puts(tmp);*/
+                /*}*/
+                /*serial_puts("\r\n");*/
+
+                /*sprintf(tmp, "%d %d %d %d %d\r\n",*/
+                        /*pkt->data.joy.throttle, pkt->data.joy.yaw,*/
+                        /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
+                        /*pkt->data.joy.buttons);*/
+                /*serial_puts(tmp);*/
+
+                if(xSemaphoreTake(command_update, 50 / portTICK_PERIOD_MS))
+                {
+                        throttle = pkt->data.joy.throttle;
+                        target_position.yaw   = pkt->data.joy.yaw;
+                        target_position.pitch = pkt->data.joy.pitch;
+                        target_position.roll  = pkt->data.joy.roll;
+
+                        xSemaphoreGive(command_update);
+                        xSemaphoreGive(command_rdy);
+                }
+            }
+        }
+
+        GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+    }
 }

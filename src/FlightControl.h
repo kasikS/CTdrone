@@ -8,7 +8,7 @@
 #ifndef FLIGHTCONTROL_H_
 #define FLIGHTCONTROL_H_
 
-void ProcessFlightControl(void);
+void ProcessFlightControl(float deltat);
 int flight_control_init(void);
 
 
