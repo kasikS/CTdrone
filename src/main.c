@@ -55,13 +55,13 @@ int main(void)
 
     delay_init();
     serial_init(460800);
+    nrf24l_init();
 
 #ifdef CONTROLLER
     xTaskCreate(controller_task, NULL, configMINIMAL_STACK_SIZE + 40, NULL, 2, NULL);
 #else
     motor_init();
     i2c_init();
-    nrf24l_init();
 
     serial_puts("siema!");
     xTaskCreate(Task_LED_Blink, NULL, configMINIMAL_STACK_SIZE + 20, NULL, 2, NULL);
