@@ -130,10 +130,10 @@ void motor_set_speed(int m, int speed)
 
     switch(m)
     {
-        case MOTOR_BL: TIM_SetCompare1(TIM1, val); break;
-        case MOTOR_FL: TIM_SetCompare2(TIM1, val); break;
-        case MOTOR_BR: TIM_SetCompare3(TIM1, val); break;
-        case MOTOR_FR: TIM_SetCompare4(TIM1, val); break;
+        case MOTOR_FL: TIM_SetCompare1(TIM1, val); break;
+        case MOTOR_BL: TIM_SetCompare2(TIM1, val); break;
+        case MOTOR_FR: TIM_SetCompare3(TIM1, val); break;
+        case MOTOR_BR: TIM_SetCompare4(TIM1, val); break;
     }
 
     motor_speed[m] = speed;
