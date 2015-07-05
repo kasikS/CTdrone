@@ -84,9 +84,9 @@ int flight_control_init(void){
 	    return pdTRUE;
 }
 
-void ProcessFlightControl(float deltat){
+angles CurrentPosition;
 
-	static angles CurrentPosition;
+void ProcessFlightControl(float deltat){
 	static angles TargetPosition = {0.0f, 0.0f, 0.0f};
 	angles CorrectPosition;
 	speed MotorsSpeed;
@@ -154,10 +154,10 @@ void ProcessFlightControl(float deltat){
 //		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
 //		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
 
-	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch - CorrectPosition.yaw;
-	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch + CorrectPosition.yaw;
-	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch + CorrectPosition.yaw;
-	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch - CorrectPosition.yaw;
+	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch;// - CorrectPosition.yaw;
+	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch;// + CorrectPosition.yaw;
+	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch;// + CorrectPosition.yaw;
+	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch;// - CorrectPosition.yaw;
 
         // TODO orson: uncomment?
 	/*if((TargetPosition.pitch!=CurrentPosition.pitch)||(TargetPosition.roll!=CurrentPosition.roll)||(TargetPosition.yaw!=CurrentPosition.yaw))*/
@@ -214,6 +214,7 @@ static void command_rx_task(void *parameters)
     uint8_t buf[PACKET_TOTAL_SIZE];
     uint8_t buf_count = 0;
     const struct packet const* pkt = (struct packet*) &buf;
+    struct packet response;
     char tmp[32];
 
     while(1){
@@ -234,16 +235,42 @@ static void command_rx_task(void *parameters)
                         /*pkt->data.joy.pitch, pkt->data.joy.roll,*/
                         /*pkt->data.joy.buttons);*/
                 /*serial_puts(tmp);*/
-
-                if(xSemaphoreTake(command_update, 50 / portTICK_PERIOD_MS))
+                if(pkt->type == PT_JOYSTICK &&
+                        xSemaphoreTake(command_update, 50 / portTICK_PERIOD_MS))
                 {
-                        throttle = pkt->data.joy.throttle;
-                        target_position.yaw   = pkt->data.joy.yaw;
-                        target_position.pitch = pkt->data.joy.pitch;
-                        target_position.roll  = pkt->data.joy.roll;
+                    throttle = pkt->data.joy.throttle;
+                    target_position.yaw   = pkt->data.joy.yaw;
+                    target_position.pitch = pkt->data.joy.pitch;
+                    target_position.roll  = pkt->data.joy.roll;
 
-                        xSemaphoreGive(command_update);
-                        xSemaphoreGive(command_rdy);
+                    xSemaphoreGive(command_update);
+                    xSemaphoreGive(command_rdy);
+                } else if(pkt->type & PT_REPORT) {
+                    int report_type = pkt->type & ~PT_REPORT;
+
+                    memset(&response, 0x00, PACKET_TOTAL_SIZE);
+                    response.type = pkt->type;
+
+                    switch(report_type) {
+                        case RPT_MOTOR:
+                            response.data.rpt_motor.fl = motor_get_speed(MOTOR_FL);
+                            response.data.rpt_motor.fr = motor_get_speed(MOTOR_FR);
+                            response.data.rpt_motor.bl = motor_get_speed(MOTOR_BL);
+                            response.data.rpt_motor.br = motor_get_speed(MOTOR_BR);
+                            break;
+
+                        case RPT_IMU:
+                            response.data.rpt_imu.yaw   = (int16_t) CurrentPosition.yaw;
+                            response.data.rpt_imu.pitch = (int16_t) CurrentPosition.pitch;
+                            response.data.rpt_imu.roll  = (int16_t) CurrentPosition.roll;
+                            break;
+
+                        default:
+                            serial_write("BADRPT", 6);
+                            break;
+                    }
+
+                    nrf24l_write((const char*)&response, PACKET_TOTAL_SIZE);
                 }
             }
         }

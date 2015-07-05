@@ -141,7 +141,7 @@ void motor_set_speed(int m, int speed)
 
 int motor_get_speed(int m)
 {
-    if(m >= MOTOR_NUMBER)
+    if(m >= MOTOR_NUMBER || m < 0)
         return -1;
 
     return motor_speed[m];

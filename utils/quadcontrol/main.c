@@ -43,6 +43,7 @@ int main(int argc, char **argv)
     int16_t crc;
     int default_cfg = 0;
     int bad_pkts_cnt = 0;
+    int pkt_cnt = 0;
 
     if(argc == 2 && !strcmp("--help", argv[1])) {
         puts("Usage: quadcontrol [config_file.cfg]");
@@ -89,56 +90,101 @@ int main(int argc, char **argv)
     active = 1;
     while(active) {
         // Prepare & send a packet
-        pkt.type = PT_JOYSTICK;
-        pkt.data.joy.throttle =  joystick_get_control_val(THROTTLE_AXIS);
-        pkt.data.joy.yaw      =  joystick_get_control_val(YAW_AXIS);
-        pkt.data.joy.pitch    =  joystick_get_control_val(PITCH_AXIS);
-        pkt.data.joy.roll     =  joystick_get_control_val(ROLL_AXIS);
-        pkt.data.joy.buttons  =  joystick_get_buttons();
+        // Report request
+        if(pkt_cnt % 2 == 0) {
+            pkt.type = PT_REPORT | RPT_IMU;
+            memset(pkt.data.text, 0, PACKET_DATA_SIZE);
+            /*printf("\nreport request sent\n");*/
+        } else {
+            pkt.type = PT_JOYSTICK;
+            pkt.data.joy.throttle =  joystick_get_control_val(THROTTLE_AXIS);
+            pkt.data.joy.yaw      =  joystick_get_control_val(YAW_AXIS);
+            pkt.data.joy.pitch    =  joystick_get_control_val(PITCH_AXIS);
+            pkt.data.joy.roll     =  joystick_get_control_val(ROLL_AXIS);
+            pkt.data.joy.buttons  =  joystick_get_buttons();
+
+#ifdef SHOW_JOY
+            printf("\nthrottle: %6d\tyaw:%6d\tpitch:%6d\troll:%6d\tbuttons:%6d",
+                    pkt.data.joy.throttle, pkt.data.joy.yaw,
+                    pkt.data.joy.pitch, pkt.data.joy.roll,
+                    pkt.data.joy.buttons);
+#endif
+        }
+
         crc = link_crc(&pkt);
-
-        printf("\nthrottle: %6d\tyaw:%6d\tpitch:%6d\troll:%6d\tbuttons:%6d",
-                pkt.data.joy.throttle, pkt.data.joy.yaw,
-                pkt.data.joy.pitch, pkt.data.joy.roll,
-                pkt.data.joy.buttons);
-
         serial_write((const uint8_t*) &pkt, PACKET_TOTAL_SIZE);
         serial_write((const uint8_t*) &crc, CRC_SIZE);
 
+#ifdef SHOW_SEND_RAW
         printf("\nsent: ");
         for(int i = 0; i < PACKET_TOTAL_SIZE; ++i)
             printf("%.2x ", ((uint8_t*)(&pkt))[i]);
 
         printf("\tcrc = %.2x", crc);
+#endif
 
         // Show response from the radio
         int cnt = serial_read(buf, sizeof(buf));
         if(cnt > 0) {
+#ifdef SHOW_RECV_RAW
             // HEX version
             printf("\treceived: ");
             for(int i = 0; i < cnt; ++i)
-                printf("%.2x ", buf[i]);
+                printf("%.2x ", (uint8_t) buf[i]);
 
             // ASCII version
             printf("  (");
             for(int i = 0; i < cnt; ++i)
                 printf("%c", buf[i]);
             printf(")");
+#endif
 
             if(cnt == 1 && buf[0] == 'E')
                 printf("\n!!! DRONE IS NOT RESPONDING !!!\n");
 
+            // Parse reports
+            if(buf[0] == 'T' && buf[1] == 'R')
+            {
+                struct packet* pkt = (struct packet*) &buf[2];
+                if(pkt->type & PT_REPORT) {
+                    int report_type = pkt->type & ~PT_REPORT;
+
+                    switch(report_type) {
+                        case RPT_MOTOR:
+                            printf("motors = FL: %d FR:%d BL:%d BR:%d\n",
+                                    pkt->data.rpt_motor.fl,
+                                    pkt->data.rpt_motor.fr,
+                                    pkt->data.rpt_motor.bl,
+                                    pkt->data.rpt_motor.br);
+                            break;
+
+                        case RPT_IMU:
+                            printf("imu = yaw: %d pitch:%d roll:%d\n",
+                                    pkt->data.rpt_imu.yaw,
+                                    pkt->data.rpt_imu.pitch,
+                                    pkt->data.rpt_imu.roll);
+                            break;
+
+                        default:
+                            printf("invalid report type\n");
+                            break;
+                    }
+                }
+            }
+
             memset(buf, 0, sizeof(buf));
             bad_pkts_cnt = 0;
         } else {
-            if(++bad_pkts_cnt) {
+            if(++bad_pkts_cnt == 10) {
                 printf("\n!!! CONTROLLER IS NOT RESPONDING !!!\n");
                 //link_init();
             }
         }
 
+        ++pkt_cnt;
+
         fflush(stdout);
-        usleep(20000);
+        usleep(30000);
     }
 
     serial_close();

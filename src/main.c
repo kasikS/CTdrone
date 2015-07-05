@@ -81,19 +81,20 @@ void controller_task(void *parameters) {
 
     // Pointers to ease buffer management
     uint8_t* ptr_mosi = buf_mosi;
+    uint8_t* ptr_miso = buf_miso;
     struct packet* pkt_miso = (struct packet*) buf_miso;
     const struct packet const* pkt_mosi = (struct packet*) buf_mosi;
     crc_t* crc_miso = (crc_t*) &buf_miso[PACKET_TOTAL_SIZE];
     const crc_t const* crc_mosi = (crc_t*) &buf_mosi[PACKET_TOTAL_SIZE];
-    int cnt_mosi = 0;
+    int cnt_mosi = 0, cnt_miso = 0;;
 
     uint8_t buf[16];
 
-    // mosi = serial
-    // miso = rf
+    // mosi = serial to rf
+    // miso = rf to serial
 
     while(1) {
-        if(serial_getc((char*)ptr_mosi)) {
+        while(serial_getc((char*)ptr_mosi)) {
             ++cnt_mosi; ++ptr_mosi;
 
             if(cnt_mosi == PACKET_TOTAL_SIZE + CRC_SIZE) {  // serial port sends crc too
@@ -131,6 +132,23 @@ void controller_task(void *parameters) {
                         nrf24l_write((const char*)pkt_mosi, PACKET_TOTAL_SIZE);
                         break;
                 }
+
+                break; // give a chance to retrieve radio packet
+            }
+        }
+
+        // Forward data received from the radio
+        while(nrf24l_getc(ptr_miso)) {
+            ++cnt_miso; ++ptr_miso;
+
+            if(cnt_miso == PACKET_TOTAL_SIZE) {
+                cnt_miso = 0;
+                ptr_miso = buf_miso;
+
+                *crc_miso = link_crc(pkt_miso);
+                serial_write((const char*) pkt_miso, PACKET_TOTAL_SIZE + CRC_SIZE);
+
+                break; // give a chance to retrieve serial port packet
             }
         }
     }

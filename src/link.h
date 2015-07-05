@@ -20,7 +20,18 @@
 
 #include <stdint.h>
 
-enum PACKET_TYPE { PT_STATUS = 0x00, PT_JOYSTICK = 0x01, PT_BOOTLOADER = 0x11 };
+enum PACKET_TYPE {
+    PT_STATUS       = 0x00,
+    PT_JOYSTICK     = 0x01,
+    PT_REPORT       = 0x80,
+    PT_BOOTLOADER   = 0x11
+};
+
+// or-combined with the packet type
+enum REPORT_TYPE {
+    RPT_MOTOR       = 0x01,
+    RPT_IMU         = 0x02
+};
 
 #define PACKET_TOTAL_SIZE   ((int)sizeof(struct packet))
 #define PACKET_DATA_SIZE    ((int)sizeof(((struct packet*)(0))->data))
@@ -37,6 +48,21 @@ struct packet
             int16_t roll;
             uint8_t buttons;
         } __attribute__((packed)) joy;
+
+        struct {
+            int16_t fl;
+            int16_t fr;
+            int16_t bl;
+            int16_t br;
+            uint8_t __padding;
+        } __attribute__((packed)) rpt_motor;
+
+        struct {
+            int16_t yaw;
+            int16_t pitch;
+            int16_t roll;
+            uint8_t __padding[3];
+        } __attribute__((packed)) rpt_imu;
 
         uint8_t text[9];
     } data;
