@@ -47,17 +47,17 @@ PID levelYawPID; // = PID(6.0, 0, 0.0);
 
 int flight_control_init(void){
 
-	levelRollPID.pgain=6.1;
-	levelRollPID.igain=0;
-	levelRollPID.dgain=0.9;
+	levelRollPID.pgain=0.7;
+	levelRollPID.igain=0; //0.000005;
+	levelRollPID.dgain=0.001;
 
-	levelPitchPID.pgain=6.1;
-	levelPitchPID.igain=0;
-	levelPitchPID.dgain=0.9;
+	levelPitchPID.pgain=0.7;
+	levelPitchPID.igain=0; //0.000005;
+	levelPitchPID.dgain=0.001;
 
-	levelYawPID.pgain=6;
-	levelYawPID.igain=0;
-	levelYawPID.dgain=0;
+	levelYawPID.pgain=0.7;
+	levelYawPID.igain=0.01;
+	levelYawPID.dgain=0; //.001;
 
         target_position.yaw = 0;
         target_position.pitch = 0;
@@ -154,10 +154,10 @@ void ProcessFlightControl(float deltat){
 //		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
 //		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
 
-	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch;// - CorrectPosition.yaw;
-	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch;// + CorrectPosition.yaw;
-	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch;// + CorrectPosition.yaw;
-	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch;// - CorrectPosition.yaw;
+	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch; // + CorrectPosition.yaw;
+	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch; // - CorrectPosition.yaw;
+	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch; // - CorrectPosition.yaw;
+	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch; // + CorrectPosition.yaw;
 
         // TODO orson: uncomment?
 	/*if((TargetPosition.pitch!=CurrentPosition.pitch)||(TargetPosition.roll!=CurrentPosition.roll)||(TargetPosition.yaw!=CurrentPosition.yaw))*/
