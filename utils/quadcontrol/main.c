@@ -26,6 +26,12 @@
 #include "joystick.h"
 #include "debug.h"
 
+// Options:
+/*#define REQUEST_REPORTS*/
+#define SHOW_JOY
+#define SHOW_RECV_RAW
+#define SHOW_SEND_RAW
+
 // http://www.modelflight.com.au/blog/how-to-fly-remote-control-quadcopter/
 
 // I do not know why I keep getting warnings about implicit usleep declaration..
@@ -90,12 +96,15 @@ int main(int argc, char **argv)
     active = 1;
     while(active) {
         // Prepare & send a packet
+#ifdef REQUEST_REPORTS
         // Report request
         if(pkt_cnt % 2 == 0) {
             pkt.type = PT_REPORT | RPT_IMU;
             memset(pkt.data.text, 0, PACKET_DATA_SIZE);
             /*printf("\nreport request sent\n");*/
-        } else {
+        } else
+#endif
+        {
             pkt.type = PT_JOYSTICK;
             pkt.data.joy.throttle =  joystick_get_control_val(THROTTLE_AXIS);
             pkt.data.joy.yaw      =  joystick_get_control_val(YAW_AXIS);
@@ -126,6 +135,7 @@ int main(int argc, char **argv)
         // Show response from the radio
         int cnt = serial_read(buf, sizeof(buf));
         if(cnt > 0) {
+
 #ifdef SHOW_RECV_RAW
             // HEX version
             printf("\treceived: ");
