@@ -9,6 +9,8 @@
 #include <task.h>
 #include <queue.h>
 #include <semphr.h>
+#include <timers.h>
+
 #include "FlightControl.h"
 #include "PID.h"
 #include "motor.h"
@@ -43,8 +45,37 @@ PID levelRollPID;// = PID(6.1, 0.0, 0.9);
 PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
 PID levelYawPID; // = PID(6.0, 0, 0.0);
 
+// RF link watchdog, tries to land if the link is down
+static xTimerHandle safe_timer;
 
+static inline void reset_safe_timer()
+{
+    xTimerReset(safe_timer, 500 / portTICK_PERIOD_MS);
+}
 
+static void safe_timer_callback(xTimerHandle timer)
+{
+    (void) timer;
+
+    serial_puts("LNKXXX\r\n");
+
+    target_position.yaw = 0;
+    target_position.pitch = 0;
+    target_position.roll = 0;
+
+    if(throttle >= 50) {
+        throttle -= 50;
+    }
+    else {
+        // It has already either crashed or landed, turn off safety timer
+        // until a new radio packet is received
+        throttle = 0;
+        xTimerStop(safe_timer, 0);
+    }
+
+    xSemaphoreGive(command_update);
+    xSemaphoreGive(command_rdy);
+}
 
 int flight_control_init(void){
 
@@ -73,16 +104,20 @@ int flight_control_init(void){
 	 if(command_update == NULL)
 		 return pdFALSE;
 
-	    portBASE_TYPE ret = xTaskCreate(flight_control_task, NULL,
-	                                    256, NULL, 2, NULL);
-	    if(ret != pdPASS)
-	        return pdFALSE;
+        safe_timer = xTimerCreate("safe_timer", 500 / portTICK_PERIOD_MS,
+                                  pdTRUE, (void*) 0, safe_timer_callback);
+        if(safe_timer == NULL)
+            return pdFALSE;
 
-	    if(xTaskCreate(command_rx_task, NULL,
-	                                    256, NULL, 2, NULL) != pdPASS)
-                return pdFALSE;
+        // safe_timer is started when the first radio packet arrives
 
-	    return pdTRUE;
+        if(xTaskCreate(flight_control_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+            return pdFALSE;
+
+        if(xTaskCreate(command_rx_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+            return pdFALSE;
+
+        return pdTRUE;
 }
 
 angles CurrentPosition;
@@ -199,8 +234,6 @@ static void flight_control_task(void *parameters)
 		deltat=deltaTime* portTICK_RATE_MS * 1000; //time in seconds
 
 		ProcessFlightControl(deltat);
-		GPIO_ToggleBits(GPIOA, GPIO_Pin_6);
-
 		vTaskDelay(1);
 	}
 }
@@ -239,6 +272,8 @@ static void command_rx_task(void *parameters)
                     target_position.yaw   = pkt->data.joy.yaw;
                     target_position.pitch = pkt->data.joy.pitch;
                     target_position.roll  = pkt->data.joy.roll;
+
+                    reset_safe_timer();
 
                     xSemaphoreGive(command_update);
                     xSemaphoreGive(command_rdy);
