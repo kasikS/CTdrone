@@ -58,7 +58,7 @@ int main(void)
     nrf24l_init();
 
 #ifdef CONTROLLER
-    xTaskCreate(controller_task, NULL, configMINIMAL_STACK_SIZE + 40, NULL, 2, NULL);
+    xTaskCreate(controller_task, NULL, 256, NULL, 2, NULL);
 #else
     motor_init();
     i2c_init();
