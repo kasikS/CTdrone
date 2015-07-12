@@ -96,11 +96,12 @@ int main(int argc, char **argv)
     active = 1;
     while(active) {
         // Prepare & send a packet
+        memset(&pkt, 0, PACKET_TOTAL_SIZE);
+
 #ifdef REQUEST_REPORTS
         // Report request
         if(pkt_cnt % 2 == 0) {
             pkt.type = PT_REPORT | RPT_IMU;
-            memset(pkt.data.text, 0, PACKET_DATA_SIZE);
             /*printf("\nreport request sent\n");*/
         } else
 #endif
@@ -194,7 +195,7 @@ int main(int argc, char **argv)
         ++pkt_cnt;
 
         fflush(stdout);
-        usleep(30000);
+        usleep(35000);
     }
 
     serial_close();
