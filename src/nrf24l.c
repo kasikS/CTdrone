@@ -28,6 +28,7 @@
 
 #ifdef CONTROLLER
 #define SHOW_IRQ
+#include "serial.h"
 #endif
 
 ///> Size of tx/rx queues (in bytes)

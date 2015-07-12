@@ -48,7 +48,7 @@ typedef struct quaternion{
 }quaternion;
 
 extern xSemaphoreHandle imu_data_rdy, imu_data_update;
-extern volatile angles imu_position;
+extern angles imu_position;
 
 bool sensorsAutodetect(void);
 bool mpu6050Detect();

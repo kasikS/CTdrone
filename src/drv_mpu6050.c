@@ -23,6 +23,7 @@
 #include "drv_mpu6050.h"
 #include "drv_hmc5883l.h"
 #include "i2c.h"
+#include "delay_timer.h"
 
 #define MPU6050_ADDRESS         0x68
 
@@ -180,7 +181,7 @@
 //xQueueHandle imu_queue;
 xSemaphoreHandle imu_data_rdy, imu_data_update;
 static void imu_task(void *parameters);
-volatile angles imu_position;
+angles imu_position;
 
 uint8_t buffer[14];
 uint16_t dmpPacketSize;
@@ -248,12 +249,9 @@ bool mpu6050Detect(void)
 	actualThreshold = 0;
 
     bool ack;
-    uint8_t sig, rev;
-    uint8_t tmp[6];
+    uint8_t sig;
 
- //   delay(3500);                  // datasheet page 13 says 30ms. other stuff could have been running meanwhile. but we'll be safe
-
-    vTaskDelay(35);
+    delay_ms(35);        // datasheet page 13 says 30ms
 
     ack = i2cRead(MPU6050_ADDRESS, MPU_RA_WHO_AM_I, 1, &sig);
     if (!ack)
@@ -266,8 +264,8 @@ bool mpu6050Detect(void)
         return false;
 
     // determine product ID and accel revision
-    i2cRead(MPU6050_ADDRESS, MPU_RA_XA_OFFS_H, 6, tmp);
-    rev = ((tmp[5] & 0x01) << 2) | ((tmp[3] & 0x01) << 1) | (tmp[1] & 0x01);
+    //i2cRead(MPU6050_ADDRESS, MPU_RA_XA_OFFS_H, 6, tmp);
+    //rev = ((tmp[5] & 0x01) << 2) | ((tmp[3] & 0x01) << 1) | (tmp[1] & 0x01);
 
     return true;
 }
@@ -387,7 +385,7 @@ void mpu6050GyroCalibrate(int16_t * gyroData, uint8_t samples)
 		sigmaX += gyroData[0] * gyroData[0];
 		sigmaY += gyroData[1] * gyroData[1];
 		sigmaZ += gyroData[2] * gyroData[2];
-		delay(5);
+		delay_ms(5);
 	}
 	// Calculate delta vectors
 	dg.x = sumX / samples;
@@ -860,8 +858,7 @@ const unsigned char mpu6050_dmpUpdates6[MPU6050_DMP_UPDATES_SIZE_6] = {
 uint8_t mpu6050_dmpInitialize(void)
 {
 	mpu6050_reset();
-	//delay(30);
-	vTaskDelay(30);
+	delay_ms(30);
     mpu6050_setSleepDisabled();
 
     mpu6050_setMemoryBank(0x10, 1, 1);
@@ -1045,7 +1042,7 @@ uint8_t mpu6050_dmpInitialize(void)
             //waiting for FIFO count > =46
             while ((fifoCount = mpu6050_getFIFOCount()) < 46)
             	{
-            	vTaskDelay(10);
+            	delay_ms(10);
             	fifoCount = 4;///////////////////////
             	}
 
@@ -1095,7 +1092,7 @@ uint8_t mpu6050_dmpInitialize(void)
 uint8_t mpu6050_dmpInitialize6(void)
 {
 	mpu6050_reset();
-	delay(30);
+	delay_ms(30);
     mpu6050_setSleepDisabled();
 
     mpu6050_setMemoryBank(0x10, 1, 1);
@@ -1118,7 +1115,7 @@ uint8_t mpu6050_dmpInitialize6(void)
 	i2cWrite(MPU6050_ADDRESS, MPU_RA_I2C_SLV0_ADDR + 0*3, 0x68);
 //	//resetting I2C Master control
 	i2cWriteBit(MPU6050_ADDRESS, MPU_RA_USER_CTRL, 1, 1);
-	delay(20);
+	delay_ms(20);
 
     //load DMP code into memory banks
     if (mpu6050_writeMemoryBlock(mpu6050_dmpMemory6, MPU6050_DMP_CODE_SIZE_6, 0, 0)) {
@@ -1218,7 +1215,6 @@ uint8_t mpu6050_dmpInitialize6(void)
 
             //reading FIFO data..."));
             mpu6050_getFIFOBytes(fifoBuffer, fifoCount);
-            uint8_t mpuIntStatus = mpu6050_getIntStatus();
 
             //writing final memory update 6/7 (function unknown)
             for (j = 0; j < 4 || j < dmpUpdate[2] + 3; j++, pos++) dmpUpdate[j] = mpu6050_dmpUpdates6[pos];
@@ -1229,7 +1225,7 @@ uint8_t mpu6050_dmpInitialize6(void)
 
             //reading FIFO data..."));
             mpu6050_getFIFOBytes(fifoBuffer, fifoCount);
-            mpuIntStatus=mpu6050_getIntStatus();
+            mpu6050_getIntStatus();     // TODO necessary?
 
             //writing final memory update 7/7 (function unknown)
             for (j = 0; j < 4 || j < dmpUpdate[2] + 3; j++, pos++)
@@ -1409,8 +1405,8 @@ uint8_t mpu6050_writeMemoryBlock(const uint8_t *data, uint16_t dataSize, uint8_t
  */
 uint8_t mpu6050_writeDMPConfigurationSet(const uint8_t *data, uint16_t dataSize) {
     uint8_t *progBuffer = 0;
-    uint8_t success, special;
-    uint16_t i, j;
+    uint8_t special;
+    uint16_t i;
 
     // config set data is a long string of blocks with the following structure:
     // [bank] [offset] [length] [byte[0], byte[1], ..., byte[length]]
@@ -1424,17 +1420,13 @@ uint8_t mpu6050_writeDMPConfigurationSet(const uint8_t *data, uint16_t dataSize)
         if (length > 0)
         {
             progBuffer = (uint8_t *)data + i;
-            success = mpu6050_writeMemoryBlock(progBuffer, length, bank, offset);
+            mpu6050_writeMemoryBlock(progBuffer, length, bank, offset);
             i += length;
         } else {
 				special = data[i++];
 				if (special == 0x01)
 				{
 					i2cWrite(MPU6050_ADDRESS, MPU_RA_INT_ENABLE, 0x32);  // single operation
-					success = 1;
-				} else {
-					// unknown special command
-					success = 0;
 				}
 			}
     }
@@ -1876,27 +1868,15 @@ int imu_init(void){
 }
 
 static void imu_task(void *parameters){
-		uint8_t devStatus; // return status after each device operation (0 = success, !0 = error);
 		uint8_t mpuIntStatus; // holds actual interrupt status byte from MPU
 		uint16_t fifoCount;
 		uint8_t fifoBuffer[48]; //64 - 6 dof// FIFO storage buffer
-		char buf[64] = {0,};
-//		uint8_t buf[64];
-		volatile uint8_t mpuInterrupt = 0;
 
 		quaternion quat;
 		axis gravity;
-		axis mag;
-
-		int int_yaw;
-		int int_pitch;
-		int int_roll;
-		int cnt=0;
-		angles current_position;
 
 		while(1){
 			GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
-			mpuInterrupt = false;
 			mpuIntStatus =  mpu6050_getIntStatus();
 			// get current FIFO count
 

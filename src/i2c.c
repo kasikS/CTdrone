@@ -95,7 +95,6 @@ static void i2c_er_handler_task(void *parameters)
 							   I2C_SR1_ARLO |
 							   I2C_SR1_BERR ))                                    // If AF, BERR or ARLO, abandon the current job and commence new if there are jobs
 			{
-				SR2Register = I2C1->SR2;                                          // Read second status register to clear ADDR if it is set (note that BTF will not be set after a NACK)
 				I2C_ITConfig(I2C1, I2C_IT_BUF, DISABLE);                          // Disable the RXNE/TXE interrupt - prevent the ISR tailchaining onto the ER (hopefully)
 				if (!(SR1Register & I2C_SR1_ARLO) && !(I2C1->CR1 & I2C_CR1_STOP)) // If we dont have an ARLO error, ensure sending of a stop
 				{

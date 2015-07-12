@@ -24,12 +24,6 @@ void Task_LED_Blink(void *params);
 void controller_task(void *parameters);
 #endif
 
-void delay(uint32_t ms)
-{
-    while (ms--)
-    {}//delayMicroseconds(1000);
-}
-
 int main(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
@@ -86,7 +80,7 @@ void controller_task(void *parameters) {
     const struct packet const* pkt_mosi = (struct packet*) buf_mosi;
     crc_t* crc_miso = (crc_t*) &buf_miso[PACKET_TOTAL_SIZE];
     const crc_t const* crc_mosi = (crc_t*) &buf_mosi[PACKET_TOTAL_SIZE];
-    int cnt_mosi = 0, cnt_miso = 0;;
+    int cnt_mosi = 0, cnt_miso = 0;
 
     uint8_t buf[16];
 
@@ -106,7 +100,7 @@ void controller_task(void *parameters) {
                 ptr_mosi = buf_mosi;
 
                 if(*crc_mosi != link_crc(pkt_mosi)) {      // invalid packet, skip
-                    sprintf(buf, "CRCXX%.2x", *crc_mosi);
+                    sprintf((char*)buf, "CRCXX%.2x", *crc_mosi);
                     serial_write((char*)buf, 7);
                     continue;
                 }
@@ -138,7 +132,7 @@ void controller_task(void *parameters) {
         }
 
         // Forward data received from the radio
-        while(nrf24l_getc(ptr_miso)) {
+        while(nrf24l_getc((char*)ptr_miso)) {
             ++cnt_miso; ++ptr_miso;
 
             if(cnt_miso == PACKET_TOTAL_SIZE) {

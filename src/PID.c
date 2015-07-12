@@ -11,7 +11,7 @@
 float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 
 	float error;
-	float windupGuard;
+	//float windupGuard;
 	// determine how badly we are doing
 	error = target - cur;
 	// the pTerm is the view from now, the pgain judges

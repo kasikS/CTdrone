@@ -16,6 +16,7 @@
 #include "nrf24l.h"
 #include "link.h"
 #include <stdio.h>
+#include <string.h>
 
 #include "serial.h"
 
@@ -35,7 +36,7 @@ static void flight_control_task(void *parameters);
 
 xSemaphoreHandle command_rdy, command_update;
 volatile angles target_position;
-volatile throttle = 0;
+volatile int throttle = 0;
 static void command_rx_task(void *parameters);
 
 PID levelRollPID;// = PID(6.1, 0.0, 0.9);
@@ -91,9 +92,6 @@ void ProcessFlightControl(float deltat){
 	angles CorrectPosition;
 	speed MotorsSpeed;
 	char buf[32] = {0,};
-	int int_yaw;
-	int int_pitch;
-	int int_roll;
 	static int cnt =0;
 
 	if(xSemaphoreTake(imu_data_rdy, 0))
@@ -109,8 +107,8 @@ void ProcessFlightControl(float deltat){
 
 			xSemaphoreGive(imu_data_update);
 
-			/*sprintf(buf, "%d,%d,%d\r\n", (int) CurrentPosition.yaw, (int) CurrentPosition.pitch, (int) CurrentPosition.roll);*/
-			/*serial_puts(buf);*/
+                        /*sprintf(buf, "%d,%d,%d\r\n", (int) CurrentPosition.yaw, (int) CurrentPosition.pitch, (int) CurrentPosition.roll);*/
+                        /*serial_puts(buf);*/
 		}
     }
 
@@ -215,7 +213,6 @@ static void command_rx_task(void *parameters)
     uint8_t buf_count = 0;
     const struct packet const* pkt = (struct packet*) &buf;
     struct packet response;
-    char tmp[32];
 
     while(1){
         if(nrf24l_getc(&c)) {

@@ -1,5 +1,8 @@
 #include "drv_hmc5883l.h"
-
+#include "i2c.h"
+#include <delay_timer.h>
+#include <string.h>
+#include <math.h>
 
 // HMC5883L, default address 0x1E
 
@@ -43,17 +46,17 @@ void hmc5883lInit(float *calibrationGain)
     bool bret = true;           // Error indicator
 
 
-    delay(50);
+    delay_ms(50);
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x010 + HMC_POS_BIAS);   // Reg A DOR = 0x010 + MS1, MS0 set to pos bias
-    // Note that the  very first measurement after a gain change maintains the same gain as the previous setting. 
+    // Note that the  very first measurement after a gain change maintains the same gain as the previous setting.
     // The new gain setting is effective from the second measurement and on.
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFB, 2 << 5); // Set the Gain
-    delay(100);
+    delay_ms(100);
     hmc5883lRead(magADC);
 
     for (i = 0; i < 10; i++) {  // Collect 10 samples
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
-        delay(50);
+        delay_ms(50);
         hmc5883lRead(magADC);       // Get the raw values in case the scales have already been changed.
 
         // Since the measurements are noisy, they should be averaged rather than taking the max.
@@ -73,7 +76,7 @@ void hmc5883lInit(float *calibrationGain)
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x010 + HMC_NEG_BIAS);   // Reg A DOR = 0x010 + MS1, MS0 set to negative bias.
     for (i = 0; i < 10; i++) {
         i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 1);
-        delay(50);
+        delay_ms(50);
         hmc5883lRead(magADC);               // Get the raw values in case the scales have already been changed.
 
         // Since the measurements are noisy, they should be averaged.
@@ -97,7 +100,7 @@ void hmc5883lInit(float *calibrationGain)
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFA, 0x70);   // Configuration Register A  -- 0 11 100 00  num samples: 8 ; output rate: 15Hz ; normal measurement mode
     i2cWrite(MAG_ADDRESS, HMC58X3_R_CONFB, 0x20);   // Configuration Register B  -- 001 00000    configuration gain 1.3Ga
     i2cWrite(MAG_ADDRESS, HMC58X3_R_MODE, 0x00);    // Mode register             -- 000000 00    continuous Conversion Mode
-    delay(100);
+    delay_ms(100);
 
     if (!bret) {                // Something went wrong so get a best guess
         magGain[0] = 1.0;
@@ -137,9 +140,8 @@ void hmc5883lRead(int16_t *magData)
 {
     uint8_t buf[6];
     int16_t mag[3];
-    int i;
     int16_t temp[2];
-	
+
     i2cRead(MAG_ADDRESS, MAG_DATA_REGISTER, 6, buf);
     mag[0] = buf[0] << 8 | buf[1];//mag2
     mag[1] = buf[2] << 8 | buf[3];
