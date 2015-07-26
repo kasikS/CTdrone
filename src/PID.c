@@ -10,8 +10,10 @@
 
 float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 
+    char buf[32];
 	float error;
-	//float windupGuard;
+        float windupGuard;
+
 	// determine how badly we are doing
 	error = target - cur;
 	// the pTerm is the view from now, the pgain judges
@@ -27,11 +29,11 @@ float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 	// not necessary, but this makes windup guard values
 	// relative to the current iGain
 
-//	windupGuard = WINDUP_GUARD_GAIN / PIDval->igain;
-//	if (PIDval->iState > windupGuard)
-//		PIDval->iState = windupGuard;
-//	else if (PIDval->iState < -windupGuard)
-//		PIDval->iState = -windupGuard;
+        windupGuard = WINDUP_GUARD_GAIN / PIDval->igain;
+        if (PIDval->iState > windupGuard)
+                PIDval->iState = windupGuard;
+        else if (PIDval->iState < -windupGuard)
+                PIDval->iState = -windupGuard;
 
 	PIDval->iTerm = PIDval->igain * PIDval->iState;
 	// the dTerm, the difference between the temperature now
@@ -42,6 +44,10 @@ float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 	// our pocket until for the next round
 	PIDval->last = cur;
 	// the magic feedback bit
+
+        sprintf(buf, "%06d %06d ", (int)(target * 100.0), (int)(cur * 100));
+        serial_puts(buf);
+
 	return PIDval->pTerm + PIDval->iTerm - PIDval->dTerm;
 }
 
