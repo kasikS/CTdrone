@@ -17,6 +17,7 @@
 #include "drv_mpu6050.h"
 #include "nrf24l.h"
 #include "link.h"
+#include "utils.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -40,6 +41,7 @@ xSemaphoreHandle command_rdy, command_update;
 volatile angles target_position;
 volatile int throttle = 0;
 static void command_rx_task(void *parameters);
+static void pid_coefs_task(void *parameters);
 
 PID levelRollPID;// = PID(6.1, 0.0, 0.9);
 PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
@@ -115,6 +117,9 @@ int flight_control_init(void){
             return pdFALSE;
 
         if(xTaskCreate(command_rx_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+            return pdFALSE;
+
+        if(xTaskCreate(pid_coefs_task, NULL, 256, NULL, 2, NULL) != pdPASS)
             return pdFALSE;
 
         return pdTRUE;
@@ -308,5 +313,66 @@ static void command_rx_task(void *parameters)
         }
 
         GPIO_ToggleBits(GPIOA, GPIO_Pin_5);
+    }
+}
+
+
+// Receives packets with new PID settings over the serial port.
+static void pid_coefs_task(void *parameters)
+{
+    #define BUF_SIZE 32
+    char buf[BUF_SIZE] = {0,};
+    int cnt = 0;
+
+    float coef = 0.0;
+    char type = 0;
+
+    while(1) {
+        if(serial_getc(&buf[cnt])) {
+            if(buf[cnt] == '\n') {       // received end of packet
+                if(cnt > 0) {
+                    type = buf[0];
+                    coef = ct_atof(&buf[1]);
+
+                    // apply the new coefficient
+
+                    // TODO semaphore
+                    switch(type) {
+                        case 'p':
+                            levelRollPID.pgain = coef;
+                            levelPitchPID.pgain = coef;
+                            levelYawPID.pgain = coef;
+                            /*serial_puts("P\r\n");*/
+                            break;
+                        case 'i':
+                            levelRollPID.igain = coef;
+                            levelPitchPID.igain = coef;
+                            levelYawPID.igain = coef;
+                            /*serial_puts("I\r\n");*/
+                            break;
+                        case 'd':
+                            levelRollPID.dgain = coef;
+                            levelPitchPID.dgain = coef;
+                            levelYawPID.dgain = coef;
+                            /*serial_puts("D\r\n");*/
+                            break;
+                        default:
+                            serial_puts("INV\r\n");
+                            break;
+                    }
+                }
+
+                // prepare for the next command
+                memset(buf, 0, BUF_SIZE);
+                cnt = 0;
+                type = 0;
+                coef = 0;
+            } else {
+                ++cnt;
+            }
+
+            if(cnt == BUF_SIZE)
+                cnt = 0;
+        }
     }
 }
