@@ -20,6 +20,7 @@ SRCS += drv_mpu6050.c
 SRCS += drv_hmc5883l.c
 SRCS += PID.c
 SRCS += FlightControl.c
+SRCS += utils.c
 
 SRCS += Device/startup_stm32f401xe.s
 
