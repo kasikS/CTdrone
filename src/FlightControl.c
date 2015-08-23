@@ -93,10 +93,10 @@ int flight_control_init(void){
 	levelYawPID.igain=0.01;
 	levelYawPID.dgain=0; //.001;
 
-        target_position.yaw = 0;
-        target_position.pitch = 0;
-        target_position.roll = 0;
-        throttle = 0;
+    target_position.yaw = 0;
+    target_position.pitch = 0;
+    target_position.roll = 0;
+    throttle = 0;
 
 	 command_rdy = xSemaphoreCreateBinary();
 	 if(command_rdy == NULL)
@@ -106,23 +106,23 @@ int flight_control_init(void){
 	 if(command_update == NULL)
 		 return pdFALSE;
 
-        safe_timer = xTimerCreate("safe_timer", 500 / portTICK_PERIOD_MS,
-                                  pdTRUE, (void*) 0, safe_timer_callback);
-        if(safe_timer == NULL)
-            return pdFALSE;
+    safe_timer = xTimerCreate("safe_timer", 500 / portTICK_PERIOD_MS,
+                              pdTRUE, (void*) 0, safe_timer_callback);
+    if(safe_timer == NULL)
+        return pdFALSE;
 
-        // safe_timer is started when the first radio packet arrives
+    // safe_timer is started when the first radio packet arrives
 
-        if(xTaskCreate(flight_control_task, NULL, 256, NULL, 2, NULL) != pdPASS)
-            return pdFALSE;
+    if(xTaskCreate(flight_control_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+        return pdFALSE;
 
-        if(xTaskCreate(command_rx_task, NULL, 256, NULL, 2, NULL) != pdPASS)
-            return pdFALSE;
+    if(xTaskCreate(command_rx_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+        return pdFALSE;
 
-        if(xTaskCreate(pid_coefs_task, NULL, 256, NULL, 2, NULL) != pdPASS)
-            return pdFALSE;
+    if(xTaskCreate(pid_coefs_task, NULL, 256, NULL, 2, NULL) != pdPASS)
+        return pdFALSE;
 
-        return pdTRUE;
+    return pdTRUE;
 }
 
 angles CurrentPosition;
@@ -147,8 +147,8 @@ void ProcessFlightControl(float deltat){
 
 			xSemaphoreGive(imu_data_update);
 
-                        /*sprintf(buf, "%d,%d,%d\r\n", (int) CurrentPosition.yaw, (int) CurrentPosition.pitch, (int) CurrentPosition.roll);*/
-                        /*serial_puts(buf);*/
+            /*sprintf(buf, "%d,%d,%d\r\n", (int) CurrentPosition.yaw, (int) CurrentPosition.pitch, (int) CurrentPosition.roll);*/
+            /*serial_puts(buf);*/
 		}
     }
 
@@ -160,14 +160,14 @@ void ProcessFlightControl(float deltat){
 			TargetPosition.pitch=target_position.pitch;
 			TargetPosition.roll=target_position.roll;
 
-                        sprintf(buf, "%d,", (int) throttle);
-                        serial_puts(buf);
-                        sprintf(buf, "%d,", (int) TargetPosition.yaw);
-                        serial_puts(buf);
-                        sprintf(buf, "%d,", (int) TargetPosition.pitch);
-                        serial_puts(buf);
-                        sprintf(buf, "%d\r\n", (int) TargetPosition.roll);
-                        serial_puts(buf);
+            sprintf(buf, "%d,", (int) throttle);
+            serial_puts(buf);
+            sprintf(buf, "%d,", (int) TargetPosition.yaw);
+            serial_puts(buf);
+            sprintf(buf, "%d,", (int) TargetPosition.pitch);
+            serial_puts(buf);
+            sprintf(buf, "%d\r\n", (int) TargetPosition.roll);
+            serial_puts(buf);
 
 			xSemaphoreGive(command_update);
 		}
