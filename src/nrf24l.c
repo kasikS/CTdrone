@@ -339,7 +339,7 @@ int nrf24l_init(void)
     nrf24l_mode = UNKNOWN;
     nrf24l_set_mode(PWR_DOWN);
 
-    nrf24l_set_channel(10);
+    nrf24l_set_channel(120);
 
     // Set pipelines size
     nrf24l_write_reg(NRF24L_RX_PW_P0, PACKET_TOTAL_SIZE);
@@ -349,9 +349,9 @@ int nrf24l_init(void)
     nrf24l_write_reg(NRF24L_RX_PW_P4, PACKET_TOTAL_SIZE);
     nrf24l_write_reg(NRF24L_RX_PW_P5, PACKET_TOTAL_SIZE);
 
-    // Set data rate and output power // TODO increase power & data rate?
-    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_0_DBM |
-                                      NRF24L_RF_SET_RF_1MBPS);
+    // Set data rate and output power
+    nrf24l_write_reg(NRF24L_RF_SETUP, NRF24L_RF_SET_PWR_0DBM |
+                                      NRF24L_RF_SET_RF_250KBPS);
 
     // Enable CRC, 2-bytes encoding
     nrf24l_write_reg(NRF24L_CONFIG, NRF24L_CONF_EN_CRC | NRF24L_CONF_CRCO);
@@ -366,8 +366,8 @@ int nrf24l_init(void)
                                        NRF24L_RXADDR_P3 | NRF24L_RXADDR_P2 |
                                        NRF24L_RXADDR_P1 | NRF24L_RXADDR_P0);
 
-    // Auto retransmit delay: 1000 (4x250) us and up to 15 retransmit trials
-    nrf24l_write_reg(NRF24L_SETUP_RETR, NRF24L_ARD_1000_US |
+    // Auto retransmit delay: 500 us and up to 15 retransmit trials
+    nrf24l_write_reg(NRF24L_SETUP_RETR, NRF24L_SET_RETR_ARD(NRF24L_ARD_500_US) |
                                         NRF24L_SET_RETR_ARC(15));
 
     // Dynamic length configurations: No dynamic length
@@ -565,7 +565,7 @@ static void nrf24l_transmitter_task(void *parameter)
                     nrf24l_raw_multi(tx_cmd, NULL, PACKET_TOTAL_SIZE + 1);
                     nrf24l_ce_enable();
                     // TODO repeat until FIFO is empty
-                    delay_us(11);
+                    delay_us(12);
                     nrf24l_ce_disable();
                 }
             }
