@@ -195,7 +195,7 @@ int main(int argc, char **argv)
         ++pkt_cnt;
 
         fflush(stdout);
-        usleep(35000);
+        usleep(45000);
     }
 
     serial_close();
