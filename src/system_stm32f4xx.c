@@ -160,7 +160,7 @@
 
 /* For input clock = 8MHz: */
 /* SYSCLK 84 MHz => PLL_M=8, PLL_N=336, PLL_P=4 */
-/* SYSCLK 48 MHz => PLL_M=16, PLL_N=384, PLL_P=4 */
+/* SYSCLK 42 MHz => PLL_M=16, PLL_N=384, PLL_P=4 */
 #define PLL_M      16
 #define PLL_N      384
 
