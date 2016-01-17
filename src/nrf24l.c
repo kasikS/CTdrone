@@ -29,6 +29,7 @@
 #ifdef CONTROLLER
 #define SHOW_IRQ
 #include "serial.h"
+#include "leds.h"
 #endif
 
 ///> Size of tx/rx queues (in bytes)
@@ -524,11 +525,14 @@ static void nrf24l_irq_handler_task(void *parameter)
                 nrf24l_set_mode(RX);
             }
 
-            if(status & NRF24L_STATUS_MAX_RT) {
 #ifdef SHOW_IRQ
+            if(status & NRF24L_STATUS_MAX_RT) {
                 serial_putc('E');
-#endif
+                leds_off(GREEN);
+            } else {
+                leds_on(GREEN);
             }
+#endif
 
             // Clear IRQ
             nrf24l_write_reg(NRF24L_STATUS, irq_src);
