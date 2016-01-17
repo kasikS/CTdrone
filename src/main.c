@@ -10,6 +10,7 @@
 #include "serial.h"
 #include "motor.h"
 #include "nrf24l.h"
+#include "leds.h"
 #include "i2c.h"
 #include "delay_timer.h"
 #include "drv_mpu6050.h"
@@ -52,6 +53,7 @@ int main(void)
 
 #ifdef CONTROLLER
     xTaskCreate(controller_task, NULL, 256, NULL, 2, NULL);
+    leds_init();
 #else
     motor_init();
     i2c_init();
