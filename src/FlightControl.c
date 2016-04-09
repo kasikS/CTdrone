@@ -42,6 +42,8 @@ volatile angles target_position;
 volatile int throttle = 0;
 static void command_rx_task(void *parameters);
 static void pid_coefs_task(void *parameters);
+extern float windupGuard;
+const int TX_CNT_MAX = 30;
 
 PID levelRollPID;// = PID(6.1, 0.0, 0.9);
 PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
@@ -61,9 +63,10 @@ static void safe_timer_callback(xTimerHandle timer)
 
     serial_puts("LNKXXX\r\n");
 
-    target_position.yaw = 0;
-    target_position.pitch = 0;
-    target_position.roll = 0;
+    // TODO uncomment in final version
+    /*target_position.yaw = 0;*/
+    /*target_position.pitch = 0;*/
+    /*target_position.roll = 0;*/
 
     if(throttle >= 50) {
         throttle -= 50;
@@ -83,11 +86,11 @@ int flight_control_init(void){
 
 	levelRollPID.pgain=0.7;
 	levelRollPID.igain=0; //0.000005;
-	levelRollPID.dgain=0.001;
+	levelRollPID.dgain=0.0;
 
 	levelPitchPID.pgain=0.7;
 	levelPitchPID.igain=0; //0.000005;
-	levelPitchPID.dgain=0.001;
+	levelPitchPID.dgain=0.0;
 
 	levelYawPID.pgain=0.7;
 	levelYawPID.igain=0.01;
@@ -106,10 +109,12 @@ int flight_control_init(void){
 	 if(command_update == NULL)
 		 return pdFALSE;
 
+         /*
     safe_timer = xTimerCreate("safe_timer", 500 / portTICK_PERIOD_MS,
                               pdTRUE, (void*) 0, safe_timer_callback);
     if(safe_timer == NULL)
         return pdFALSE;
+        */
 
     // safe_timer is started when the first radio packet arrives
 
@@ -127,12 +132,13 @@ int flight_control_init(void){
 
 angles CurrentPosition;
 
+int tx_cnt = 0;
+
 void ProcessFlightControl(float deltat){
 	static angles TargetPosition = {0.0f, 0.0f, 0.0f};
 	angles CorrectPosition;
 	speed MotorsSpeed;
 	char buf[32] = {0,};
-	static int cnt =0;
 
 	if(xSemaphoreTake(imu_data_rdy, 0))
     {
@@ -160,26 +166,27 @@ void ProcessFlightControl(float deltat){
 			TargetPosition.pitch=target_position.pitch;
 			TargetPosition.roll=target_position.roll;
 
-            sprintf(buf, "%d,", (int) throttle);
-            serial_puts(buf);
-            sprintf(buf, "%d,", (int) TargetPosition.yaw);
-            serial_puts(buf);
-            sprintf(buf, "%d,", (int) TargetPosition.pitch);
-            serial_puts(buf);
-            sprintf(buf, "%d\r\n", (int) TargetPosition.roll);
-            serial_puts(buf);
+            /*sprintf(buf, "%d,", (int) throttle);*/
+            /*serial_puts(buf);*/
+            /*sprintf(buf, "%d,", (int) TargetPosition.yaw);*/
+            /*serial_puts(buf);*/
+            /*sprintf(buf, "%d,", (int) TargetPosition.pitch);*/
+            /*serial_puts(buf);*/
+            /*sprintf(buf, "%d\r\n", (int) TargetPosition.roll);*/
+            /*serial_puts(buf);*/
 
 			xSemaphoreGive(command_update);
 		}
     }
 
-// negaitve value means left side is up
-	CorrectPosition.roll = PIDupdate(&levelRollPID, TargetPosition.roll, constrain(CurrentPosition.roll, -50, 50), deltat);
+	// Positive values are to the left
+	CorrectPosition.yaw = PIDupdate(&levelYawPID, TargetPosition.yaw, CurrentPosition.yaw, deltat);
 	// Positive values mean the frontend is up
 	// Constrain to 45 degrees, because beyond that, we're fucked anyway
 	CorrectPosition.pitch = PIDupdate(&levelPitchPID,TargetPosition.pitch, constrain(CurrentPosition.pitch, -50, 50), deltat);
-	// Positive values are to the left
-	CorrectPosition.yaw = PIDupdate(&levelYawPID, TargetPosition.yaw, CurrentPosition.yaw, deltat);
+        // negaitve value means left side is up
+	CorrectPosition.roll = PIDupdate(&levelRollPID, TargetPosition.roll, constrain(CurrentPosition.roll, -50, 50), deltat);
+
 	// Apply offsets to all motors evenly to ensure we pivot on the center
 
 	//char buf[16]={0,};
@@ -192,15 +199,32 @@ void ProcessFlightControl(float deltat){
 //		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
 //		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
 
-	MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch; // + CorrectPosition.yaw;
-	MotorsSpeed.fr = throttle + CorrectPosition.roll + CorrectPosition.pitch; // - CorrectPosition.yaw;
-	MotorsSpeed.bl = throttle - CorrectPosition.roll - CorrectPosition.pitch; // - CorrectPosition.yaw;
-	MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch; // + CorrectPosition.yaw;
+        if(throttle > 1100) {
+            MotorsSpeed.fl = 0; //throttle - CorrectPosition.roll + CorrectPosition.pitch; // + CorrectPosition.yaw;
+            MotorsSpeed.fr = throttle + CorrectPosition.roll; // + CorrectPosition.pitch; // - CorrectPosition.yaw;
+            MotorsSpeed.bl = throttle - CorrectPosition.roll; // - CorrectPosition.pitch; // - CorrectPosition.yaw;
+            MotorsSpeed.br = 0; //throttle + CorrectPosition.roll - CorrectPosition.pitch; // + CorrectPosition.yaw;
+        } else {
+            MotorsSpeed.fl = 0;
+            MotorsSpeed.fr = 0;
+            MotorsSpeed.bl = 0;
+            MotorsSpeed.br = 0;
+            levelRollPID.iState = 0;
+            levelPitchPID.iState = 0;
+            levelYawPID.iState = 0;
+        }
+
+        if(tx_cnt == TX_CNT_MAX) {
+            sprintf(buf, "%04d %04d %04d %04d\r\n", MotorsSpeed.fl, MotorsSpeed.fr, MotorsSpeed.bl, MotorsSpeed.br);
+            serial_puts(buf);
+            tx_cnt = 0;
+        } else {
+            ++tx_cnt;
+        }
 
         // TODO orson: uncomment?
 	/*if((TargetPosition.pitch!=CurrentPosition.pitch)||(TargetPosition.roll!=CurrentPosition.roll)||(TargetPosition.yaw!=CurrentPosition.yaw))*/
 	{
-		++cnt;
 		/*if(cnt >= 100) {
 			sprintf(buf, "%d\t%d\t%d\t%d\r\n", MotorsSpeed.fl, MotorsSpeed.fr, MotorsSpeed.bl, MotorsSpeed.br);
 			serial_puts(buf);
@@ -209,7 +233,6 @@ void ProcessFlightControl(float deltat){
 		*/
 
 		//xQueueSend( motors_queue, ( void * ) &MotorsSpeed, 0);
-
         motor_set_speed(MOTOR_FL, MotorsSpeed.fl);
         motor_set_speed(MOTOR_FR, MotorsSpeed.fr);
         motor_set_speed(MOTOR_BL, MotorsSpeed.bl);
@@ -325,36 +348,45 @@ static void pid_coefs_task(void *parameters)
     int cnt = 0;
 
     float coef = 0.0;
-    char type = 0;
+    char type = 0, axis = 0;
+    PID*pid_controller = 0;
 
     while(1) {
         if(serial_getc(&buf[cnt])) {
             if(buf[cnt] == '\n') {       // received end of packet
                 if(cnt > 0) {
-                    type = buf[0];
-                    coef = ct_atof(&buf[1]);
+                    type = buf[1];
+                    axis = buf[0];
+
+                    coef = ct_atof(&buf[2]);
+                    // select axis
+                    switch(axis) {
+                        case 'y': pid_controller = &levelYawPID; break;
+                        case 'p': pid_controller = &levelPitchPID; break;
+                        case 'r': pid_controller = &levelRollPID; break;
+                    }
 
                     // apply the new coefficient
 
                     // TODO semaphore
                     switch(type) {
                         case 'p':
-                            levelRollPID.pgain = coef;
-                            levelPitchPID.pgain = coef;
-                            levelYawPID.pgain = coef;
-                            /*serial_puts("P\r\n");*/
+                            if(pid_controller)
+                                pid_controller->pgain = coef;
                             break;
                         case 'i':
-                            levelRollPID.igain = coef;
-                            levelPitchPID.igain = coef;
-                            levelYawPID.igain = coef;
-                            /*serial_puts("I\r\n");*/
+                            if(pid_controller)
+                                pid_controller->igain = coef;
                             break;
                         case 'd':
-                            levelRollPID.dgain = coef;
-                            levelPitchPID.dgain = coef;
-                            levelYawPID.dgain = coef;
-                            /*serial_puts("D\r\n");*/
+                            if(pid_controller)
+                                pid_controller->dgain = coef;
+                            break;
+                        case 't':
+                            throttle = coef;
+                            break;
+                        case 'w':
+                            windupGuard = coef;
                             break;
                         default:
                             serial_puts("INV\r\n");

@@ -50,8 +50,15 @@ static int motor_speed[MOTOR_NUMBER] = { 0, };
 // CH3: PA10
 // CH4: PA11
 
+static __IO uint32_t* timers[4];
+
 int motor_init(void)
 {
+    timers[0] = &TIM1->CCR1;
+    timers[1] = &TIM1->CCR2;
+    timers[2] = &TIM1->CCR3;
+    timers[3] = &TIM1->CCR4;
+
     GPIO_InitTypeDef gpio_conf;
     TIM_TimeBaseInitTypeDef timer_conf;
     TIM_OCInitTypeDef channel_conf;
@@ -128,12 +135,14 @@ void motor_set_speed(int m, int speed)
     int val = (speed / 1000.0) * MILLISECOND; // / MAX_SPEED + MILLISECOND;
 #endif
 
+    /**timers[m] = val;*/
+
     switch(m)
     {
-        case MOTOR_FL: TIM_SetCompare1(TIM1, val); break;
-        case MOTOR_BL: TIM_SetCompare2(TIM1, val); break;
-        case MOTOR_FR: TIM_SetCompare3(TIM1, val); break;
-        case MOTOR_BR: TIM_SetCompare4(TIM1, val); break;
+        case MOTOR_FL: TIM1->CCR1 = val; break; //TIM_SetCompare1(TIM1, val); break;
+        case MOTOR_BL: TIM1->CCR2 = val; break; //TIM_SetCompare2(TIM1, val); break;
+        case MOTOR_FR: TIM1->CCR3 = val; break; //TIM_SetCompare3(TIM1, val); break;
+        case MOTOR_BR: TIM1->CCR4 = val; break; //TIM_SetCompare4(TIM1, val); break;
     }
 
     motor_speed[m] = speed;

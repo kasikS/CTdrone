@@ -6,16 +6,34 @@
  */
 
 #include "PID.h"
-#define WINDUP_GUARD_GAIN 500.0 //should be 0-100% for the throttle?
+#include <stdio.h> // TODO remove (debugging)
+#include "serial.h" // TODO remove (debugging)
+#include "leds.h"
+#define WINDUP_GUARD_GAIN 150.0 //should be 0-100% for the throttle?
+
+float windupGuard;
+extern int tx_cnt;
+extern const int TX_CNT_MAX;
 
 float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 
     char buf[32];
 	float error;
-        float windupGuard;
 
 	// determine how badly we are doing
 	error = target - cur;
+
+        if(tx_cnt == TX_CNT_MAX) {
+            sprintf(buf, "%06d %06d ", (int)(target * 100.0), (int)(cur * 100.0));
+            serial_puts(buf);
+        }
+
+        if(error < 2.0 && error > -2.0) {
+            leds_on(GREEN);
+        } else {
+            leds_off(GREEN);
+        }
+
 	// the pTerm is the view from now, the pgain judges
 	// how much we care about error at this instant.
 	PIDval->pTerm =PIDval->pgain * error;
@@ -44,9 +62,6 @@ float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
 	// our pocket until for the next round
 	PIDval->last = cur;
 	// the magic feedback bit
-
-        sprintf(buf, "%06d %06d ", (int)(target * 100.0), (int)(cur * 100));
-        serial_puts(buf);
 
 	return PIDval->pTerm + PIDval->iTerm - PIDval->dTerm;
 }
