@@ -27,6 +27,20 @@
 
 #define MPU6050_ADDRESS         0x68
 
+/////////////////////
+#include "PID.h"
+#include "motor.h"
+#include "leds.h"
+
+extern volatile angles target_position;
+angles CorrectPosition;
+extern angles CurrentPosition;
+extern volatile angles TargetPosition;
+extern PID levelRollPID;// = PID(6.1, 0.0, 0.9);
+extern PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
+extern PID levelYawPID; // = PID(6.0, 0, 0.0);
+extern volatile int throttle;
+//////////////////////
 
 #define DMP_MEM_START_ADDR 0x6E
 #define DMP_MEM_R_W 0x6F
@@ -183,6 +197,7 @@ xSemaphoreHandle imu_data_rdy, imu_data_update;
 static void imu_task(void *parameters);
 angles imu_position;
 
+uint8_t fifoBuffer[256]; //64 - 6 dof// FIFO storage buffer
 uint8_t buffer[14];
 uint16_t dmpPacketSize;
 uint8_t *dmpPacketBuffer;
@@ -627,7 +642,7 @@ const unsigned char mpu6050_dmpConfig[MPU6050_DMP_CONFIG_SIZE] = {
 		0x07, 0x67, 0x01, 0x9A, // ?
 		0x07, 0x68, 0x04, 0xF1, 0x28, 0x30, 0x38, // CFG_12 inv_send_accel -> inv_construct3_fifo
 		0x07, 0x8D, 0x04, 0xF1, 0x28, 0x30, 0x38, // ??? CFG_12 inv_send_mag -> inv_construct3_fifo
-		0x02, 0x16, 0x02, 0x00, 0x01 // D_0_22 inv_set_fifo_rate
+		0x02, 0x16, 0x02, 0x00, 0x02 // D_0_22 inv_set_fifo_rate
 		// This very last 0x01 WAS a 0x09, which drops the FIFO rate down to 20 Hz. 0x07 is 25 Hz,
 		// 0x01 is 100Hz. Going faster than 100Hz (0x00=200Hz) tends to result in very noisy data.
 		// DMP output frequency is calculated easily using this equation: (200Hz / (1 + value))
@@ -834,7 +849,7 @@ const unsigned char mpu6050_dmpConfig6[MPU6050_DMP_CONFIG_SIZE_6] = {
 	0x07, 0x46, 0x01, 0x9A, // CFG_GYRO_SOURCE inv_send_gyro
 	0x07, 0x47, 0x04, 0xF1, 0x28, 0x30, 0x38, // CFG_9 inv_send_gyro -> inv_construct3_fifo
 	0x07, 0x6C, 0x04, 0xF1, 0x28, 0x30, 0x38, // CFG_12 inv_send_accel -> inv_construct3_fifo
-	0x02, 0x16, 0x02, 0x00, 0x01 //0x01 // D_0_22 inv_set_fifo_rate
+	0x02, 0x16, 0x02, 0x00, 0x02 //0x01 // D_0_22 inv_set_fifo_rate
 	// This very last 0x01 WAS a 0x09, which drops the FIFO rate down to 20 Hz. 0x07 is 25 Hz,
 	// 0x01 is 100Hz. Going faster than 100Hz (0x00=200Hz) tends to result in very noisy data.
 	// DMP output frequency is calculated easily using this equation: (200Hz / (1 + value))
@@ -947,7 +962,6 @@ uint8_t mpu6050_dmpInitialize(void)
 
             //reading FIFO count
             uint8_t fifoCount = mpu6050_getFIFOCount();
-            uint8_t fifoBuffer[128];
 
             //writing final memory update 3/19 (function unknown)
             for (j = 0; j < 4 || j < dmpUpdate[2] + 3; j++, pos++) dmpUpdate[j] = mpu6050_dmpUpdates[pos];
@@ -1169,7 +1183,6 @@ uint8_t mpu6050_dmpInitialize6(void)
 
             //reading FIFO count
             uint8_t fifoCount = mpu6050_getFIFOCount();
-            uint8_t fifoBuffer[128];
             mpu6050_getFIFOBytes(fifoBuffer, fifoCount);
 
             //setting motion detection threshold to 2
@@ -1870,12 +1883,12 @@ int imu_init(void){
 static void imu_task(void *parameters){
 		uint8_t mpuIntStatus; // holds actual interrupt status byte from MPU
 		uint16_t fifoCount;
-		uint8_t fifoBuffer[48]; //64 - 6 dof// FIFO storage buffer
 
 		quaternion quat;
 		axis gravity;
 
 		while(1){
+                    vTaskDelay(1);
 			GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
 			mpuIntStatus =  mpu6050_getIntStatus();
 			// get current FIFO count
@@ -1888,12 +1901,13 @@ static void imu_task(void *parameters){
 
 			fifoCount = mpu6050_getFIFOCount();
 			// check for overflow (this should never happen unless our code is too inefficient)
-			if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+                        if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
 			// reset so we can continue cleanly
-				mpu6050_resetFIFO();
-				serial_puts("FIFO overflow!\r\n");
+                                mpu6050_resetFIFO();
+                                serial_puts("FIFO overflow!\r\n");
 			// otherwise, check for DMP data ready interrupt (this should happen frequently)
-			} else if (mpuIntStatus & 0x03) {
+                        } else
+                            if (mpuIntStatus & 0x03) {
 				// wait for correct available data length, should be a VERY short wait
 				//while (fifoCount < dmpPacketSize) fifoCount = mpu6050_getFIFOCount();
 				if(fifoCount<dmpPacketSize){
@@ -1913,7 +1927,7 @@ static void imu_task(void *parameters){
 //			 	serial_puts(buf);
 
 
-				GPIO_ToggleBits(GPIOA, GPIO_Pin_7);
+				/*GPIO_ToggleBits(GPIOA, GPIO_Pin_7);*/
 				// track FIFO count here in case there is > 1 packet available
 				// (this lets us immediately read more without waiting for an interrupt)
 				fifoCount -= dmpPacketSize;
@@ -1929,11 +1943,34 @@ static void imu_task(void *parameters){
 				{
 					mpu6050_getQuaternion(fifoBuffer, &quat);
 					mpu6050_getGravity(&gravity, &quat);
-					if(xSemaphoreTake(imu_data_update, 50 / portTICK_PERIOD_MS))
+					/*if(xSemaphoreTake(imu_data_update, 50 / portTICK_PERIOD_MS))*/
 					{
 						mpu6050_getYawPitchRoll(&quat, &imu_position, &gravity);
-						xSemaphoreGive(imu_data_update);
-						xSemaphoreGive(imu_data_rdy);
+						/*xSemaphoreGive(imu_data_update);*/
+						/*xSemaphoreGive(imu_data_rdy);*/
+
+
+			// ccw negative, cw positive
+			CurrentPosition.yaw=(imu_position.yaw*180.0f/M_PI);
+			// down negative, up positive
+			CurrentPosition.pitch=(imu_position.pitch*180.0f/M_PI);
+			// left side up negative, right side up positive
+			CurrentPosition.roll=(imu_position.roll*180.0f/M_PI);
+
+			/*TargetPosition.yaw=target_position.yaw;*/
+			/*TargetPosition.pitch=target_position.pitch;*/
+			/*TargetPosition.roll=target_position.roll;*/
+
+                        CorrectPosition.pitch = PIDupdate(&levelPitchPID, 0, CurrentPosition.pitch, 1);
+                        // negaitve value means left side is up
+                        CorrectPosition.roll = PIDupdate(&levelRollPID, 0, CurrentPosition.roll, 1);
+
+                        motor_set_speed(MOTOR_FL, 1 + throttle - CorrectPosition.roll + CorrectPosition.pitch);
+                        motor_set_speed(MOTOR_FR, 0);
+                        motor_set_speed(MOTOR_BL, 0);
+                        motor_set_speed(MOTOR_BR, throttle + CorrectPosition.roll - CorrectPosition.pitch);
+
+
 					}
 
 

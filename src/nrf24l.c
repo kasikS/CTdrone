@@ -569,7 +569,8 @@ static void nrf24l_transmitter_task(void *parameter)
                     nrf24l_raw_multi(tx_cmd, NULL, PACKET_TOTAL_SIZE + 1);
                     nrf24l_ce_enable();
                     // TODO repeat until FIFO is empty
-                    delay_us(12);
+                    vTaskDelay(1);
+                    /*delay_us(12);*/
                     nrf24l_ce_disable();
                 }
             }

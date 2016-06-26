@@ -15,7 +15,9 @@ float windupGuard;
 extern int tx_cnt;
 extern const int TX_CNT_MAX;
 
-float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
+// TODO http://hackaday.com/2016/05/18/flying-with-proportional-integral-derivative-control/
+
+float PIDupdate(PID * PIDval, float target, float cur, int deltaTime){
 
     char buf[32];
 	float error;
@@ -26,12 +28,6 @@ float PIDupdate(PID * PIDval, float target, float cur, float deltaTime){
         if(tx_cnt == TX_CNT_MAX) {
             sprintf(buf, "%06d %06d ", (int)(target * 100.0), (int)(cur * 100.0));
             serial_puts(buf);
-        }
-
-        if(error < 2.0 && error > -2.0) {
-            leds_on(GREEN);
-        } else {
-            leds_off(GREEN);
         }
 
 	// the pTerm is the view from now, the pgain judges

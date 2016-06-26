@@ -29,14 +29,14 @@
 const int MIN_SPEED = 1000;
 const int MAX_SPEED = 2000;
 
-// Timer frequency [Hz]
-#define TIMER_CLK   3200000
-// Control signal period [s]
-#define PERIOD      20e-3
+// Timer frequency [kHz]
+#define TIMER_CLK   3200
+// Control signal period [ms]
+#define PERIOD      3
 // Duty cycle responding to the period (100%) [counter units]
 #define MAX_DUTY    ((uint32_t)(PERIOD * TIMER_CLK))
 // One millisecond [counter units]
-#define MILLISECOND ((uint32_t)(MAX_DUTY / (PERIOD * 1000)))
+#define MILLISECOND ((uint32_t)(MAX_DUTY / PERIOD))
 
 /*#define LED_TEST*/
 
@@ -80,7 +80,7 @@ int motor_init(void)
 
     TIM_TimeBaseStructInit(&timer_conf);
     timer_conf.TIM_Period = MAX_DUTY;
-    timer_conf.TIM_Prescaler = (uint16_t) ((SystemCoreClock) / TIMER_CLK) - 1;
+    timer_conf.TIM_Prescaler = (uint16_t) ((SystemCoreClock) / (TIMER_CLK * 1000)) - 1;
     timer_conf.TIM_ClockDivision = TIM_CKD_DIV1;
     timer_conf.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(TIM1, &timer_conf);
@@ -103,16 +103,6 @@ int motor_init(void)
     TIM_Cmd(TIM1, ENABLE);
     TIM_CtrlPWMOutputs(TIM1, ENABLE);
 
-    // FreeRTOS
-    motors_queue = xQueueCreate(MOTORS_QUEUE_SIZE, sizeof(speed));  // or send as pointers..? but it will be overwritten...
-    if(motors_queue == 0)
-        return pdFALSE;
-
-    portBASE_TYPE ret = xTaskCreate(motors_task, NULL,
-                                    configMINIMAL_STACK_SIZE, NULL, 2, NULL);
-    if(ret != pdPASS)
-        return pdFALSE;
-
     return pdTRUE;
 }
 
@@ -132,7 +122,8 @@ void motor_set_speed(int m, int speed)
 #ifdef LED_TEST
     int val = (speed - 1000) / 50.0 * MILLISECOND;
 #else
-    int val = (speed / 1000.0) * MILLISECOND; // / MAX_SPEED + MILLISECOND;
+    int val = (speed * MILLISECOND) / 1000;
+    /*int val = (speed / 1000.0) * MILLISECOND;*/
 #endif
 
     /**timers[m] = val;*/
@@ -154,22 +145,4 @@ int motor_get_speed(int m)
         return -1;
 
     return motor_speed[m];
-}
-
-void motors_task(void *parameters)
-{
-   speed SettingsFromPID;
-
-   while(1)
-    {
-        if(xQueueReceive(motors_queue, &SettingsFromPID, portMAX_DELAY))
-        {
-            motor_set_speed(MOTOR_FL, SettingsFromPID.fl);
-            motor_set_speed(MOTOR_FR, SettingsFromPID.fr);
-            motor_set_speed(MOTOR_BL, SettingsFromPID.bl);
-            motor_set_speed(MOTOR_BR, SettingsFromPID.br);
-        }
-
-        vTaskDelay(100);
-    }
 }

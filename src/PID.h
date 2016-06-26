@@ -15,5 +15,5 @@ typedef struct PID{
 	float last;
 }PID;
 
-float PIDupdate(PID * PIDval, float target, float cur, float deltaTime); //deltatime - time between each call
+float PIDupdate(PID * PIDval, float target, float cur, int deltaTime); //deltatime - time between each call
 #endif /* PID_H_ */

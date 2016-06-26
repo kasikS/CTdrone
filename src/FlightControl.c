@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "serial.h"
+#include "leds.h"
 
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 //check values of imu - max, orientation (where is +/-, left/right), center it
@@ -43,7 +44,7 @@ volatile int throttle = 0;
 static void command_rx_task(void *parameters);
 static void pid_coefs_task(void *parameters);
 extern float windupGuard;
-const int TX_CNT_MAX = 30;
+const int TX_CNT_MAX = 500;
 
 PID levelRollPID;// = PID(6.1, 0.0, 0.9);
 PID levelPitchPID; // = PID(6.1, 0.0, 0.9);
@@ -84,17 +85,17 @@ static void safe_timer_callback(xTimerHandle timer)
 
 int flight_control_init(void){
 
-	levelRollPID.pgain=0.7;
-	levelRollPID.igain=0; //0.000005;
+	levelRollPID.pgain=0.0;
+	levelRollPID.igain=0.0; //0.000005;
 	levelRollPID.dgain=0.0;
 
-	levelPitchPID.pgain=0.7;
-	levelPitchPID.igain=0; //0.000005;
+	levelPitchPID.pgain=0.0;
+	levelPitchPID.igain=0.0; //0.000005;
 	levelPitchPID.dgain=0.0;
 
-	levelYawPID.pgain=0.7;
-	levelYawPID.igain=0.01;
-	levelYawPID.dgain=0; //.001;
+	levelYawPID.pgain=0.0;
+	levelYawPID.igain=0.0;
+	levelYawPID.dgain=0.0; //.001;
 
     target_position.yaw = 0;
     target_position.pitch = 0;
@@ -117,9 +118,10 @@ int flight_control_init(void){
         */
 
     // safe_timer is started when the first radio packet arrives
-
+/*
     if(xTaskCreate(flight_control_task, NULL, 256, NULL, 2, NULL) != pdPASS)
         return pdFALSE;
+        */
 
     if(xTaskCreate(command_rx_task, NULL, 256, NULL, 2, NULL) != pdPASS)
         return pdFALSE;
@@ -133,9 +135,9 @@ int flight_control_init(void){
 angles CurrentPosition;
 
 int tx_cnt = 0;
+volatile angles TargetPosition = {0.0f, 0.0f, 0.0f};
 
-void ProcessFlightControl(float deltat){
-	static angles TargetPosition = {0.0f, 0.0f, 0.0f};
+void ProcessFlightControl(int deltat){
 	angles CorrectPosition;
 	speed MotorsSpeed;
 	char buf[32] = {0,};
@@ -192,6 +194,15 @@ void ProcessFlightControl(float deltat){
 	//char buf[16]={0,};
 //	sprintf(buf, "%d\r\n", deltat);
 //	serial_puts(buf);
+//
+        float roll_err = CorrectPosition.roll - TargetPosition.roll;
+        float pitch_err = CorrectPosition.pitch - TargetPosition.pitch;
+//
+        if(pitch_err < 2.0 && pitch_err > -2.0 && roll_err < 2.0 && roll_err > -2.0) {
+            leds_on(GREEN);
+        } else {
+            leds_off(GREEN);
+        }
 
 	//check first if engines are in move..
 //		motor_set_speed(MOTOR_FL, motor_get_speed(MOTOR_FL) - rollAdjust - pitchAdjust + yawAdjust);
@@ -199,11 +210,11 @@ void ProcessFlightControl(float deltat){
 //		motor_set_speed(MOTOR_BL, motor_get_speed(MOTOR_BL) - rollAdjust + pitchAdjust - yawAdjust);
 //		motor_set_speed(MOTOR_BR, motor_get_speed(MOTOR_BR) + rollAdjust + pitchAdjust + yawAdjust);
 
-        if(throttle > 1100) {
-            MotorsSpeed.fl = 0; //throttle - CorrectPosition.roll + CorrectPosition.pitch; // + CorrectPosition.yaw;
-            MotorsSpeed.fr = throttle + CorrectPosition.roll; // + CorrectPosition.pitch; // - CorrectPosition.yaw;
-            MotorsSpeed.bl = throttle - CorrectPosition.roll; // - CorrectPosition.pitch; // - CorrectPosition.yaw;
-            MotorsSpeed.br = 0; //throttle + CorrectPosition.roll - CorrectPosition.pitch; // + CorrectPosition.yaw;
+        if(throttle >= MIN_SPEED) {
+            MotorsSpeed.fl = throttle - CorrectPosition.roll + CorrectPosition.pitch; // + CorrectPosition.yaw;
+            MotorsSpeed.fr = 0; // throttle + CorrectPosition.roll + CorrectPosition.pitch; // - CorrectPosition.yaw;
+            MotorsSpeed.bl = 0; // throttle - CorrectPosition.roll - CorrectPosition.pitch; // - CorrectPosition.yaw;
+            MotorsSpeed.br = throttle + CorrectPosition.roll - CorrectPosition.pitch; // + CorrectPosition.yaw;
         } else {
             MotorsSpeed.fl = 0;
             MotorsSpeed.fr = 0;
@@ -246,23 +257,20 @@ static void flight_control_task(void *parameters)
 	portTickType previousTime=0;
 	portTickType currentTime=0;
 	portTickType deltaTime=0;
-	float deltat;
+	int deltat;
 
 	previousTime = xTaskGetTickCount();
 
 	while(1){
-		currentTime = xTaskGetTickCount(); ///configTICK_RATE_HZ;
+		currentTime = xTaskGetTickCount();
 		deltaTime = currentTime - previousTime;
-//		char buf[16]={0,};
-//		sprintf(buf, "delta %d\r\n", deltaTime);
-//		serial_puts(buf);
-
 		previousTime = currentTime;
-	//	deltat=deltaTime/configTICK_RATE_HZ; //time in seconds
-		deltat=deltaTime* portTICK_RATE_MS * 1000; //time in seconds
+		deltat = deltaTime * portTICK_RATE_MS; //time in milliseconds
 
-		ProcessFlightControl(deltat);
-		vTaskDelay(1);
+                if(deltat > 0)
+                    ProcessFlightControl(deltat);
+
+		vTaskDelay(2);
 	}
 }
 
@@ -350,6 +358,7 @@ static void pid_coefs_task(void *parameters)
     float coef = 0.0;
     char type = 0, axis = 0;
     PID*pid_controller = 0;
+    volatile float*target = 0;
 
     while(1) {
         if(serial_getc(&buf[cnt])) {
@@ -361,9 +370,25 @@ static void pid_coefs_task(void *parameters)
                     coef = ct_atof(&buf[2]);
                     // select axis
                     switch(axis) {
-                        case 'y': pid_controller = &levelYawPID; break;
-                        case 'p': pid_controller = &levelPitchPID; break;
-                        case 'r': pid_controller = &levelRollPID; break;
+                        case 'y':
+                            pid_controller = &levelYawPID;
+                            target = &(TargetPosition.yaw);
+                            break;
+
+                        case 'p':
+                            pid_controller = &levelPitchPID;
+                            target = &(TargetPosition.pitch);
+                            break;
+
+                        case 'r':
+                            pid_controller = &levelRollPID;
+                            target = &(TargetPosition.roll);
+                            break;
+
+                        default:
+                            pid_controller = 0;
+                            target = 0;
+                            break;
                     }
 
                     // apply the new coefficient
@@ -387,6 +412,10 @@ static void pid_coefs_task(void *parameters)
                             break;
                         case 'w':
                             windupGuard = coef;
+                            break;
+                        case 'a':
+                            if(target)
+                                *target = coef;
                             break;
                         default:
                             serial_puts("INV\r\n");
