@@ -22,6 +22,15 @@ float ct_atof(char *s)
     float a = 0.0;
     int e = 0;
     int c;
+    int total_sign = 1;
+
+    if(*s == '-') {
+        ++s;
+        total_sign = -1;
+    } else if(*s == '+') {
+        ++s;
+        total_sign = 1;
+    }
 
     while ((c = *s++) != '\0' && isdigit(c)) {
         a = a*10.0 + (c - '0');
@@ -64,7 +73,8 @@ float ct_atof(char *s)
         a *= 0.1;
         e++;
     }
-    return a;
+
+    return a * total_sign;
 }
 
 
