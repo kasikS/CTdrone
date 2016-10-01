@@ -86,7 +86,7 @@ int joystick_init(const char* device)
         /*joy.version >> 16, (joy.version >> 8) & 0xff, joy.version & 0xff);*/
 
     joy.axis = calloc(joy.axes, sizeof(int));
-    joy.button = calloc(joy.buttons, sizeof(char));
+    joy.button = calloc(joy.buttons, sizeof(int));
 
     /*if(pthread_mutex_init(&js_update_mtx, NULL))*/
         /*return 2;*/
