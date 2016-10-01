@@ -413,9 +413,7 @@ static void SetSysClock(void)
     RCC->CR |= RCC_CR_PLLON;
 
     /* Wait till the main PLL is ready */
-    while((RCC->CR & RCC_CR_PLLRDY) == 0)
-    {
-    }
+    while((RCC->CR & RCC_CR_PLLRDY) == 0);
 
 #if defined (STM32F40_41xxx) || defined (STM32F427_437xx) || defined (STM32F429_439xx)
     /* Configure Flash prefetch, Instruction cache, Data cache and wait state */
@@ -433,8 +431,6 @@ static void SetSysClock(void)
 
     /* Wait till the main PLL is used as system clock source */
     while ((RCC->CFGR & (uint32_t)RCC_CFGR_SWS ) != RCC_CFGR_SWS_PLL);
-    {
-    }
   }
   else
   { /* If HSE fails to start-up, the application will have wrong clock
